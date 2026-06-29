@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hudson County and NYC Housing Statistics: 2019 to 2024</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        .map-header {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            text-align: center;
+            pointer-events: auto;
+            max-width: 80%;
+        }
+
+        .map-header h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        .map-header p {
+            margin: 3px 0 0 0;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .custom-popup {
+            font-size: 14px;
+            line-height: 1.4;
+            max-width: 250px;
+        }
+
+        .custom-popup h3 {
+            margin: 0 0 5px 0;
+            color: #2c3e50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+
+        .metric-label {
+            font-weight: bold;
+            color: #555;
+            margin-right: 10px;
+        }
+
+        .control-panel {
+            background: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            font-size: 14px;
+        }
+
+        .control-panel select {
+            padding: 5px;
+            margin-top: 5px;
+            width: 100%;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+        }
+
+        .info.legend {
+            background: white;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 18px;
+            color: #555;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            max-width: 220px;
+        }
+
+        .info.legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="map-header">
+        <h1>Hudson County & NYC Housing Statistics</h1>
+        <p>Housing Changes: 2019 to 2024</p>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([40.7128, -74.0060], 11);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(map);
+
+        // Core sequential color palette (5 classes)
+        const colors = ['#ca0020', '#f4a582', '#c2c2c2', '#92c5de', '#0571b0'];
+
+        // Helper function to color features based on calculated dynamic break steps
+        function getColor(value, breaks) {
+            if (value === undefined || value === null || isNaN(value)) return '#ccc';
+            if (value >= breaks[3]) return colors[4];
+            if (value >= breaks[2]) return colors[3];
+            if (value >= breaks[1]) return colors[2];
+            if (value >= breaks[0]) return colors[1];
+            return colors[0];
+        }
+
+        // Asynchronously fetch both geography file and CSV
+        Promise.all([
+            fetch('county_boundaries.geojson').then(response => {
+                if (!response.ok) throw new Error('Failed to load GeoJSON');
+                return response.json();
+            }),
+            fetch('housing_data_2019_2024.csv').then(response => {
+                if (!response.ok) throw new Error('Failed to load CSV');
+                return response.text();
+            })
+        ])
+            .then(([geoJsonData, rawCsvData]) => {
+
+                const headerLabelMap = {};
+                let geoidCleanKey = 'GEOID';
+
+                // Process the CSV file into a lookup map
+                const parsedCsv = Papa.parse(rawCsvData, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    // make sure the original header is cleaned and saved
+                    // for use in the tooltip
+                    transformHeader: function (originalHeader) {
+                        const trimmed = originalHeader.trim();
+                        const safeKey = trimmed
+                            .replace(/[^a-zA-Z0-9_]/g, '_')
+                            .replace(/__+/g, '_')
+                            .replace(/^_+|_+$/g, '');
+
+                        headerLabelMap[safeKey] = trimmed;
+                        console.log(trimmed, safeKey)
+                        return safeKey;
+                    }
+                });
+
+                let metricCleanKeys = [];
+                if (parsedCsv.data.length > 0) {
+                    metricCleanKeys = Object.keys(parsedCsv.data[0]).filter(
+                        key => key !== geoidCleanKey && key.toUpperCase() !== 'NAME'
+                    );
+                }
+
+                const dataLookup = {};
+                parsedCsv.data.forEach(row => {
+                    const metrics = {};
+                    metricCleanKeys.forEach(key => {
+                        metrics[key] = row[key];
+                    });
+                    const rowKey = row[geoidCleanKey] ? String(row[geoidCleanKey]).trim() : '';
+                    dataLookup[rowKey] = metrics;
+                });
+
+                geoJsonData.features.forEach(feature => {
+                    const geoId = feature.properties.GEOID ? String(feature.properties.GEOID).trim() : '';
+                    feature.properties.csvMetrics = dataLookup[geoId] || {};
+                });
+
+                let geoJsonLayer;
+                let legendControl;
+                let currentMetricKey = metricCleanKeys[0];
+
+                // Smart rounding helper to find clean intervals for legend
+                function roundToCleanValue(value, range) {
+                    if (range === 0) return value;
+
+                    // Determine magnitude order
+                    const magnitude = Math.pow(10, Math.floor(Math.log10(range))) / 10;
+
+                    if (magnitude >= 1) {
+                        return Math.round(value / magnitude) * magnitude;
+                    } else {
+                        // round cleanly to 1 or 2 decimal spots
+                        return parseFloat(value.toFixed(range < 2 ? 2 : 1));
+                    }
+                }
+
+                // Function to compute dynamically rounded interval breaks
+                function calculateRoundedBreaks(metricKey) {
+                    const values = parsedCsv.data
+                        .map(row => row[metricKey])
+                        .filter(v => typeof v === 'number' && !isNaN(v))
+                        .sort((a, b) => a - b);
+
+                    if (values.length === 0) return { min: 0, max: 100, breaks: [20, 40, 60, 80] };
+
+                    let min = values[0];
+                    let max = values[values.length - 1];
+                    const range = max - min;
+
+                    const rawStep = range / 5;
+
+                    // Round the steps cleanly
+                    const b1 = roundToCleanValue(min + rawStep, range);
+                    const b2 = roundToCleanValue(min + (rawStep * 2), range);
+                    const b3 = roundToCleanValue(min + (rawStep * 3), range);
+                    const b4 = roundToCleanValue(min + (rawStep * 4), range);
+
+                    return {
+                        min: min,
+                        max: max,
+                        breaks: [b1, b2, b3, b4]
+                    };
+                }
+
+                // Helper to cleanly format numbers based on context label
+                function formatLegendValue(val, label) {
+                    if (label.toLowerCase().includes('change')) {
+                        return val.toLocaleString(undefined, { maximumFractionDigits: 1 }) + '%';
+                    }
+                    return val.toLocaleString(undefined, { maximumFractionDigits: 0 });
+                }
+
+                // Function to fully redraw/update the map layers and legend control
+                function updateMap() {
+                    const originalLabel = headerLabelMap[currentMetricKey] || currentMetricKey;
+                    const breakData = calculateRoundedBreaks(currentMetricKey);
+                    const breaks = breakData.breaks;
+
+                    // A. Remove existing layer
+                    if (geoJsonLayer) {
+                        map.removeLayer(geoJsonLayer);
+                    }
+
+                    // B. Re-render GeoJSON
+                    geoJsonLayer = L.geoJSON(geoJsonData, {
+                        style: function (feature) {
+                            const value = feature.properties.csvMetrics[currentMetricKey];
+                            return {
+                                fillColor: getColor(value, breaks),
+                                weight: 2,
+                                opacity: 1,
+                                color: 'white',
+                                fillOpacity: 0.7
+                            };
+                        },
+                        onEachFeature: function (feature, layer) {
+                            layer.on({
+                                click: function (e) {
+                                    const props = feature.properties;
+                                    const metrics = props.csvMetrics || {};
+
+                                    // REMOVED THE GEOID / FIPS METRIC ROW FROM THIS TEMPLATE
+                                    let popupContent = `
+                                        <div class="custom-popup">
+                                            <h3>${props.NAME || 'Unknown'} County</h3>
+                                    `;
+
+                                    metricCleanKeys.forEach(cleanKey => {
+                                        const value = metrics[cleanKey];
+                                        const label = headerLabelMap[cleanKey] || cleanKey;
+
+                                        let formattedValue = 'N/A';
+                                        if (value !== undefined && value !== null) {
+                                            formattedValue = typeof value === 'number' ? value.toLocaleString() : value;
+                                            if (label.toLowerCase().includes('change')) {
+                                                formattedValue += '%';
+                                            }
+                                        }
+
+                                        const isCurrent = cleanKey === currentMetricKey;
+                                        popupContent += `
+                                            <div class="metric-row" ${isCurrent ? 'style="background-color: #f5f5f5; padding: 2px 0;"' : ''}>
+                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}:</span>
+                                                <span ${isCurrent ? 'style="font-weight: bold; color: #0570b0;"' : ''}>${formattedValue}</span>
+                                            </div>
+                                        `;
+                                    });
+
+                                    popupContent += `</div>`;
+                                    layer.bindPopup(popupContent).openPopup();
+                                },
+                                mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.9, weight: 3 }); },
+                                mouseout: function (e) { e.target.setStyle({ fillOpacity: 0.7, weight: 2 }); }
+                            });
+                        }
+                    }).addTo(map);
+
+                    // C. Re-create the Legend Control with clean ranges
+                    if (legendControl) {
+                        map.removeControl(legendControl);
+                    }
+
+                    legendControl = L.control({ position: 'bottomright' });
+                    legendControl.onAdd = function () {
+                        const div = L.DomUtil.create('div', 'info legend');
+                        div.innerHTML = `<strong>${originalLabel}</strong><br><br>`;
+
+                        // Construct clean range brackets using our rounded steps
+                        div.innerHTML += `<i style="background:${colors[0]}"></i> ${formatLegendValue(breakData.min, originalLabel)} &ndash; ${formatLegendValue(breaks[0], originalLabel)}<br>`;
+                        div.innerHTML += `<i style="background:${colors[1]}"></i> ${formatLegendValue(breaks[0], originalLabel)} &ndash; ${formatLegendValue(breaks[1], originalLabel)}<br>`;
+                        div.innerHTML += `<i style="background:${colors[2]}"></i> ${formatLegendValue(breaks[1], originalLabel)} &ndash; ${formatLegendValue(breaks[2], originalLabel)}<br>`;
+                        div.innerHTML += `<i style="background:${colors[3]}"></i> ${formatLegendValue(breaks[2], originalLabel)} &ndash; ${formatLegendValue(breaks[3], originalLabel)}<br>`;
+                        div.innerHTML += `<i style="background:${colors[4]}"></i> ${formatLegendValue(breaks[3], originalLabel)} &ndash; ${formatLegendValue(breakData.max, originalLabel)}`;
+
+                        return div;
+                    };
+                    legendControl.addTo(map);
+                }
+
+                // --- UI DROP-DOWN SELECTION CONTROL ---
+                const selectorControl = L.control({ position: 'topright' });
+                selectorControl.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'control-panel');
+                    div.innerHTML = '<label for="metric-select"><strong>Select Metric:</strong></label><br>';
+
+                    const select = L.DomUtil.create('select', '', div);
+                    select.id = 'metric-select';
+
+                    metricCleanKeys.forEach(cleanKey => {
+                        const option = L.DomUtil.create('option', '', select);
+                        option.value = cleanKey;
+                        option.textContent = headerLabelMap[cleanKey] || cleanKey;
+                        if (cleanKey === currentMetricKey) option.selected = true;
+                    });
+
+                    L.DomEvent.disableClickPropagation(div);
+                    L.DomEvent.disableScrollPropagation(div);
+
+                    L.DomEvent.on(select, 'change', function (e) {
+                        currentMetricKey = e.target.value;
+                        updateMap();
+                    });
+
+                    return div;
+                };
+                selectorControl.addTo(map);
+
+                // Initial map load
+                updateMap();
+
+            })
+            .catch(error => {
+                console.error('Error loading or processing map data:', error);
+            });
+    </script>
+</body>
+
+</html>
