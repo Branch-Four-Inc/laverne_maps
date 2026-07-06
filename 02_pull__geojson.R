@@ -24,14 +24,14 @@ final_map_data <- st_transform(final_map_data, crs = 4326)
 # write to tract boundaries.geojson file
 st_write(
     final_map_data,
-    "housing_maps/lv_housing_county_boundaries.geojson",
+    "housing_maps/lv_housing_tract_boundaries.geojson",
     driver = "GeoJSON",
     delete_dsn = TRUE
 )
 
 st_write(
     final_map_data,
-    "housing_maps/lv_population_county_boundaries.geojson",
+    "housing_maps/lv_population_tract_boundaries.geojson",
     driver = "GeoJSON",
     delete_dsn = TRUE
 )

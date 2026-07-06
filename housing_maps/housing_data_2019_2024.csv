@@ -1,7 +1,8 @@
-NAME,GEOID,Total Housing Units Change,Rental Units Change,Median Gross Rent Change,Median Owner Costs Change,Total Housing Units (2024)
-Hudson County,34017,13.97,18.11,37.41,22.37,326976
-Bronx County,36005,6.86,4.09,18.28,17.52,574059
-Kings County,36047,5.37,1.79,23.87,11.77,1122521
-New York County,36061,4.41,2.03,26.18,58.13,932314
-Queens County,36081,6.16,10.75,16.64,20.71,922890
-Richmond County,36085,2.25,-2.28,32.26,16.23,185848
+tract,GEOID,Total Housing Units Change,Total Occupied Units Change,Owner Occupied Change,Renter Occupied Change,Vacant Housing Change,Median Gross Rent Change,Median Owner Costs Change,Total Housing Units (2024)
+4002.07,6037400207,10,52,3,49,-42,1444,209,1562
+4002.08,6037400208,249,259,228,31,-10,2899,-446,496
+4002.09,6037400209,-279,-198,-347,149,-81,2899,557,1663
+4015,6037401500,39,-30,-117,87,69,1086,523,1986
+4016.01,6037401601,-42,69,-206,275,-111,563,613,2370
+4016.02,6037401602,142,-18,-90,72,160,595,647,2209
+4089,6037408900,66,-5,-13,7,72,977,-78,2503
