@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>La Verne Housing Statistics: 2019 to 2024</title>
+    <title>La Verne Population Statistics: 2019 to 2024</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -117,8 +117,8 @@
 
 <body>
     <div class="map-header">
-        <h1>La Verne Housing Statistics</h1>
-        <p>Housing Changes: 2019 to 2024</p>
+        <h1>La Verne Population Statistics</h1>
+        <p>Population Changes: 2019 to 2024</p>
     </div>
 
     <div id="map"></div>
@@ -146,11 +146,11 @@
 
         // Asynchronously fetch both geography file and CSV
         Promise.all([
-            fetch('lv_housing_tract_boundaries.geojson').then(response => {
+            fetch('lv_population_tract_boundaries.geojson').then(response => {
                 if (!response.ok) throw new Error('Failed to load GeoJSON');
                 return response.json();
             }),
-            fetch('housing_data_2019_2024.csv').then(response => {
+            fetch('population_data_2019_2024.csv').then(response => {
                 if (!response.ok) throw new Error('Failed to load CSV');
                 return response.text();
             })
@@ -183,7 +183,7 @@
                 let metricCleanKeys = [];
                 if (parsedCsv.data.length > 0) {
                     metricCleanKeys = Object.keys(parsedCsv.data[0]).filter(
-                        key => key !== geoidCleanKey && key.toUpperCase() !== 'NAME' && key.toLowerCase() !== 'tract' && key !== 'Total_Housing_Units_2024'
+                        key => key !== geoidCleanKey && key.toUpperCase() !== 'NAME' && key.toLowerCase() !== 'tract' && key.toLowerCase() !== 'total_population_2024'
                     );
 
                 }
