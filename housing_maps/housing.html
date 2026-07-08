@@ -251,7 +251,12 @@
 
                 // Helper to cleanly format numbers based on context label
                 function formatLegendValue(val, label) {
-                    return val.toLocaleString(undefined, { maximumFractionDigits: 0 });
+                    const isMedian = label.toLowerCase().includes('median');
+                    const absFormatted = Math.abs(val).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                    const prefix = isMedian ? '$' : '';
+                    if (val > 0) return '+' + prefix + absFormatted;
+                    if (val < 0) return '-' + prefix + absFormatted;
+                    return prefix + absFormatted;
                 }
 
                 // Function to fully redraw/update the map layers and legend control
@@ -295,7 +300,16 @@
 
                                         let formattedValue = 'N/A';
                                         if (value !== undefined && value !== null) {
-                                            formattedValue = typeof value === 'number' ? value.toLocaleString() : value;
+                                            if (typeof value === 'number') {
+                                                const isMedian = label.toLowerCase().includes('median');
+                                                const absFormatted = Math.abs(value).toLocaleString();
+                                                const prefix = isMedian ? '$' : '';
+                                                if (value > 0) formattedValue = '+' + prefix + absFormatted;
+                                                else if (value < 0) formattedValue = '-' + prefix + absFormatted;
+                                                else formattedValue = prefix + absFormatted;
+                                            } else {
+                                                formattedValue = value;
+                                            }
                                         }
 
                                         const isCurrent = cleanKey === currentMetricKey;
