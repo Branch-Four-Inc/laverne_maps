@@ -144,60 +144,112 @@
             return colors[0];
         }
 
-        // Asynchronously fetch both geography file and CSV
+        // Asynchronously fetch geography and CSV data
         Promise.all([
             fetch('lv_population_tract_boundaries.geojson').then(response => {
                 if (!response.ok) throw new Error('Failed to load GeoJSON');
                 return response.json();
             }),
             fetch('population_data_2019_2024.csv').then(response => {
-                if (!response.ok) throw new Error('Failed to load CSV');
+                if (!response.ok) throw new Error('Failed to load population CSV');
+                return response.text();
+            }),
+            fetch('race_data_2019_2024.csv').then(response => {
+                if (!response.ok) throw new Error('Failed to load race CSV');
                 return response.text();
             })
         ])
-            .then(([geoJsonData, rawCsvData]) => {
+            .then(([geoJsonData, rawPopulationCsvData, rawRaceCsvData]) => {
 
                 const headerLabelMap = {};
                 let geoidCleanKey = 'GEOID';
 
-                // Process the CSV file into a lookup map
-                const parsedCsv = Papa.parse(rawCsvData, {
-                    header: true,
-                    dynamicTyping: true,
-                    skipEmptyLines: true,
-                    // make sure the original header is cleaned and saved
-                    // for use in the tooltip
-                    transformHeader: function (originalHeader) {
-                        const trimmed = originalHeader.trim();
-                        const safeKey = trimmed
-                            .replace(/[^a-zA-Z0-9_]/g, '_')
-                            .replace(/__+/g, '_')
-                            .replace(/^_+|_+$/g, '');
+                function cleanHeader(originalHeader) {
+                    const trimmed = originalHeader.trim();
+                    const safeKey = trimmed
+                        .replace(/[^a-zA-Z0-9_]/g, '_')
+                        .replace(/__+/g, '_')
+                        .replace(/^_+|_+$/g, '');
 
-                        headerLabelMap[safeKey] = trimmed;
-                        console.log(trimmed, safeKey)
-                        return safeKey;
-                    }
-                });
-
-                let metricCleanKeys = [];
-                if (parsedCsv.data.length > 0) {
-                    metricCleanKeys = Object.keys(parsedCsv.data[0]).filter(
-                        key => key !== geoidCleanKey && key.toUpperCase() !== 'NAME' && key.toLowerCase() !== 'tract' && key.toLowerCase() !== 'total_population_2024'
-                    );
-
+                    headerLabelMap[safeKey] = trimmed;
+                    return safeKey;
                 }
 
-                const dataLookup = {};
-                parsedCsv.data.forEach(row => {
-                    const metrics = {};
-                    metricCleanKeys.forEach(key => {
-                        metrics[key] = row[key];
+                function parseCsv(rawCsvData) {
+                    return Papa.parse(rawCsvData, {
+                        header: true,
+                        dynamicTyping: true,
+                        skipEmptyLines: true,
+                        transformHeader: cleanHeader
                     });
-                    let rowKey = row[geoidCleanKey] ? String(row[geoidCleanKey]).trim() : '';
-                    if (rowKey.length === 10) rowKey = '0' + rowKey; // restore CA leading zero
-                    dataLookup[rowKey] = metrics;
-                });
+                }
+
+                const parsedPopulationCsv = parseCsv(rawPopulationCsvData);
+                const parsedRaceCsv = parseCsv(rawRaceCsvData);
+
+                const populationMetricKeys = [
+                    "total_pop_change",
+                    "male_total_change",
+                    "female_total_change",
+                    "0_19_Change",
+                    "20_39_Change",
+                    "40_59_Change",
+                    "60_79_Change",
+                    "80_Change"
+                ];
+
+                const raceMetricKeys = [
+                    "white_change",
+                    "black_change",
+                    "american_indian_change",
+                    "asian_change",
+                    "pacific_islander_change",
+                    "hispanic_latino_change",
+                    "not_hispanic_change",
+                    "two_or_more_races_change",
+                    "other_race_change",
+                ];
+
+                const metricCleanKeys = [...populationMetricKeys, ...raceMetricKeys];
+
+                headerLabelMap["total_pop_change"] = "Total Population Change";
+                headerLabelMap["male_total_change"] = "Male Population Change";
+                headerLabelMap["female_total_change"] = "Female Population Change";
+                headerLabelMap["0_19_Change"] = "Age 0–19 Change";
+                headerLabelMap["20_39_Change"] = "Age 20–39 Change";
+                headerLabelMap["40_59_Change"] = "Age 40–59 Change";
+                headerLabelMap["60_79_Change"] = "Age 60–79 Change";
+                headerLabelMap["80_Change"] = "Age 80+ Change";
+                headerLabelMap["not_hispanic_change"] = "Not Hispanic Change";
+                headerLabelMap["white_change"] = "White Change";
+                headerLabelMap["black_change"] = "Black Change";
+                headerLabelMap["american_indian_change"] = "American Indian Change";
+                headerLabelMap["asian_change"] = "Asian Change";
+                headerLabelMap["pacific_islander_change"] = "Pacific Islander Change";
+                headerLabelMap["other_race_change"] = "Other Race Change";
+                headerLabelMap["two_or_more_races_change"] = "Two or More Races Change";
+                headerLabelMap["hispanic_latino_change"] = "Hispanic/Latino Change";
+
+                const dataLookup = {};
+                const combinedRows = [];
+
+                function addRowsToLookup(rows, keys) {
+                    rows.forEach(row => {
+                        let rowKey = row[geoidCleanKey] ? String(row[geoidCleanKey]).trim() : '';
+                        if (rowKey.length === 10) rowKey = '0' + rowKey; // restore CA leading zero
+                        if (!rowKey) return;
+
+                        if (!dataLookup[rowKey]) dataLookup[rowKey] = {};
+                        keys.forEach(key => {
+                            dataLookup[rowKey][key] = row[key];
+                        });
+
+                        combinedRows.push(row);
+                    });
+                }
+
+                addRowsToLookup(parsedPopulationCsv.data, populationMetricKeys);
+                addRowsToLookup(parsedRaceCsv.data, raceMetricKeys);
 
                 geoJsonData.features.forEach(feature => {
                     const geoId = feature.properties.GEOID ? String(feature.properties.GEOID).trim() : '';
@@ -225,7 +277,7 @@
 
                 // Function to compute dynamically rounded interval breaks
                 function calculateRoundedBreaks(metricKey) {
-                    const values = parsedCsv.data
+                    const values = combinedRows
                         .map(row => row[metricKey])
                         .filter(v => typeof v === 'number' && !isNaN(v))
                         .sort((a, b) => a - b);
