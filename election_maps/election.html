@@ -12,20 +12,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <style>
-        .map-header {
-            position: absolute;
-            top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 1000;
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
 
-            background: rgba(255, 255, 255, 0.9);
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        .map-header {
+            flex: 0 0 auto;
+            z-index: 1000;
+            background: #fff;
             padding: 10px 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
             text-align: center;
-            pointer-events: auto;
-            max-width: 80%;
         }
 
         .map-header h1 {
@@ -41,15 +50,10 @@
             color: #7f8c8d;
         }
 
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-        }
-
         #map {
-            height: 100vh;
-            width: 100vw;
+            flex: 1;
+            min-height: 0;
+            width: 100%;
         }
 
         .custom-popup {
@@ -101,12 +105,6 @@
             border-radius: 3px;
             border: 1px solid #ccc;
             font-size: 13px;
-        }
-
-        .control-count {
-            margin-top: 6px;
-            font-size: 11px;
-            color: #7f8c8d;
         }
 
         .info.legend {
@@ -187,6 +185,64 @@
             line-height: 1.5;
             display: none;
         }
+
+        @media (max-width: 600px) {
+            .map-header {
+                padding: 8px 12px;
+            }
+
+            .map-header h1 {
+                font-size: 15px;
+            }
+
+            .map-header p {
+                font-size: 11px;
+            }
+
+            .control-panel {
+                max-width: 150px;
+                font-size: 12px;
+                padding: 8px 10px;
+            }
+
+            .control-panel select {
+                font-size: 12px;
+            }
+
+            .info.legend {
+                max-width: 140px;
+                font-size: 10px;
+                line-height: 14px;
+                padding: 8px;
+            }
+
+            .info.legend i {
+                width: 14px;
+                height: 14px;
+                margin-right: 6px;
+            }
+
+            .legend-note {
+                font-size: 10px;
+                line-height: 13px;
+            }
+
+            .custom-popup {
+                min-width: 0;
+                font-size: 13px;
+            }
+
+            .district-label {
+                font-size: 10px;
+                padding: 3px 6px;
+            }
+
+            .error-box {
+                max-width: 88%;
+                font-size: 13px;
+                padding: 14px 16px;
+            }
+        }
     </style>
 </head>
 
@@ -241,6 +297,10 @@
         function normalizeDistrict(value) {
             if (value === undefined || value === null) return '';
             return String(value).replace(/\D/g, '');
+        }
+
+        function isSmallScreen() {
+            return window.matchMedia('(max-width: 600px)').matches;
         }
 
         function showError(message) {
@@ -357,6 +417,7 @@
                 let geoJsonLayer;
                 let legendControl;
                 let currentRace = raceKeys[0];
+                let hasFitBounds = false;
 
                 function updateMap() {
 
@@ -389,7 +450,7 @@
                             }
 
                             layer.bindTooltip(labelHtml, {
-                                permanent: true,
+                                permanent: !isSmallScreen(),
                                 direction: 'center',
                                 className: 'district-label',
                                 opacity: 1
@@ -425,6 +486,11 @@
                             });
                         }
                     }).addTo(map);
+
+                    if (!hasFitBounds) {
+                        map.fitBounds(geoJsonLayer.getBounds(), { padding: [15, 15] });
+                        hasFitBounds = true;
+                    }
 
                     if (legendControl) {
                         map.removeControl(legendControl);
@@ -477,11 +543,20 @@
                 // Initial map load
                 updateMap();
 
+                let wasSmall = isSmallScreen();
+                window.addEventListener('resize', function () {
+                    const nowSmall = isSmallScreen();
+                    if (nowSmall !== wasSmall) {
+                        wasSmall = nowSmall;
+                        updateMap();
+                    }
+                });
+
             })
             .catch(error => {
                 showError('<strong>Could not load the map data</strong><br><br>' +
-                    error.message + '<br><br>The ' + CSV_FILE + 
-                    ' must sit in the same folder as this HTML file and  the GeoJson file must be in shape_files folder in the irectory, and it must be served over ' +
+                    error.message + '<br><br>Both ' + GEOJSON_FILE + ' and ' + CSV_FILE +
+                    ' must sit in the same folder as this HTML file, and it must be served over ' +
                     'http (python -m http.server), not opened directly as a file.');
                 console.error(error);
             });
