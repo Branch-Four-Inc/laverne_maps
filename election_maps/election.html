@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Verne Election Results by Council District</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        .map-header {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            text-align: center;
+            pointer-events: auto;
+            max-width: 80%;
+        }
+
+        .map-header h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        .map-header p {
+            margin: 3px 0 0 0;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .custom-popup {
+            font-size: 14px;
+            line-height: 1.4;
+            min-width: 210px;
+        }
+
+        .custom-popup h3 {
+            margin: 0 0 5px 0;
+            color: #2c3e50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        .popup-race {
+            font-size: 11px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+
+        .metric-label {
+            font-weight: bold;
+            color: #555;
+            margin-right: 12px;
+        }
+
+        .control-panel {
+            background: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            font-size: 14px;
+            max-width: 280px;
+        }
+
+        .control-panel select {
+            padding: 5px;
+            margin-top: 5px;
+            width: 100%;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+        }
+
+        .control-count {
+            margin-top: 6px;
+            font-size: 11px;
+            color: #7f8c8d;
+        }
+
+        .info.legend {
+            background: white;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 18px;
+            color: #555;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            max-width: 220px;
+        }
+
+        .info.legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+
+        .legend-note {
+            clear: both;
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid #eee;
+            font-size: 11px;
+            color: #7f8c8d;
+            line-height: 15px;
+        }
+
+        .district-label {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid #999;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            line-height: 1.35;
+            text-align: center;
+            color: #2c3e50;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            white-space: nowrap;
+        }
+
+        .district-label:before {
+            display: none;
+        }
+
+        .label-district {
+            font-size: 10px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .label-leader {
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .label-numbers {
+            color: #555;
+        }
+
+        .error-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1200;
+            background: #fdecea;
+            border: 1px solid #f5c6cb;
+            color: #a02020;
+            padding: 16px 22px;
+            border-radius: 6px;
+            font-size: 14px;
+            max-width: 440px;
+            line-height: 1.5;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="map-header">
+        <h1>La Verne Election Results</h1>
+        <p>Leading candidate by city council district</p>
+    </div>
+
+    <div id="map"></div>
+    <div class="error-box" id="error-box"></div>
+
+    <script>
+        // ---- FILES THIS MAP READS -------------------------------------------
+        const GEOJSON_FILE = 'shape_files/laverne_districts.geojson';
+        const CSV_FILE = 'laverne_target_races_by_district.csv';
+        // ---------------------------------------------------------------------
+
+        // Initialize the map
+        const map = L.map('map').setView([34.1258, -117.7746], 13);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        }).addTo(map);
+
+        const colors = ['#f2f0f7', '#cbc9e2', '#9e9ac8', '#756bb1', '#54278f'];
+
+        const breaks = [40, 50, 60, 80];
+
+        const bandLabels = [
+            'Under 40%',
+            '40% to 50%',
+            '50% to 60%',
+            '60% to 80%',
+            '80% and above'
+        ];
+
+        const noDataColor = '#ccc';
+
+        // Helper function to color features from the leader's vote share
+        function getColor(share) {
+            if (share === undefined || share === null || isNaN(share)) return noDataColor;
+            if (share >= breaks[3]) return colors[4];
+            if (share >= breaks[2]) return colors[3];
+            if (share >= breaks[1]) return colors[2];
+            if (share >= breaks[0]) return colors[1];
+            return colors[0];
+        }
+
+        // Council districts arrive as "1ST", "2ND" in the CSV but "1", "2" in the
+        // GeoJSON. Reduce both sides to bare digits so the join always matches.
+        function normalizeDistrict(value) {
+            if (value === undefined || value === null) return '';
+            return String(value).replace(/\D/g, '');
+        }
+
+        function showError(message) {
+            const box = document.getElementById('error-box');
+            box.style.display = 'block';
+            box.innerHTML = message;
+        }
+
+        // Asynchronously fetch both geography file and CSV
+        Promise.all([
+            fetch(GEOJSON_FILE).then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status + ' loading ' + GEOJSON_FILE);
+                return response.json();
+            }),
+            fetch(CSV_FILE).then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status + ' loading ' + CSV_FILE);
+                return response.text();
+            })
+        ])
+            .then(([geoJsonData, rawCsvData]) => {
+
+                const headerLabelMap = {};
+
+                // Process the CSV file into a lookup map
+                const parsedCsv = Papa.parse(rawCsvData, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    transformHeader: function (originalHeader) {
+                        const trimmed = originalHeader.trim();
+                        const safeKey = trimmed
+                            .replace(/[^a-zA-Z0-9_]/g, '_')
+                            .replace(/__+/g, '_')
+                            .replace(/^_+|_+$/g, '');
+
+                        headerLabelMap[safeKey] = trimmed;
+                        return safeKey;
+                    }
+                });
+
+                const raceResults = {};
+                const raceTotals = {};
+
+                parsedCsv.data.forEach(row => {
+                    const race = row.race ? String(row.race).trim() : '';
+                    const candidate = row.candidate ? String(row.candidate).trim() : '';
+                    const district = normalizeDistrict(row.council_district);
+                    if (!race || !candidate || !district) return;
+
+                    if (!raceResults[race]) {
+                        raceResults[race] = {};
+                        raceTotals[race] = {};
+                    }
+                    if (!raceResults[race][district]) {
+                        raceResults[race][district] = [];
+                    }
+
+                    raceResults[race][district].push({
+                        candidate: candidate,
+                        votes: Number(row.votes) || 0,
+                        share: Number(row.vote_share_pct)
+                    });
+
+                    raceTotals[race][district] = Number(row.race_total) || 0;
+                });
+
+                // Sort each district's candidates
+                Object.keys(raceResults).forEach(race => {
+                    Object.keys(raceResults[race]).forEach(district => {
+                        raceResults[race][district].sort((a, b) => b.votes - a.votes);
+                    });
+                });
+
+                const allRaces = Object.keys(raceResults);
+
+                // Drop races that recorded no votes in any district
+                const raceKeys = allRaces.filter(race => {
+                    let cast = 0;
+                    Object.keys(raceTotals[race]).forEach(d => { cast += raceTotals[race][d]; });
+                    return cast > 0;
+                });
+
+                if (raceKeys.length === 0) {
+                    showError('<strong>No races found in ' + CSV_FILE + '</strong><br><br>' +
+                        'The file loaded but produced no usable rows. Check that it has the ' +
+                        'columns council_district, race, candidate, votes, race_total, vote_share_pct.');
+                    return;
+                }
+
+                // Attach the leader of every race to the matching district
+                geoJsonData.features.forEach(feature => {
+                    const district = normalizeDistrict(feature.properties.district);
+                    const leaders = {};
+
+                    raceKeys.forEach(race => {
+                        const rows = (raceResults[race] || {})[district] || [];
+                        if (rows.length === 0 || raceTotals[race][district] === 0) {
+                            leaders[race] = null;
+                            return;
+                        }
+                        const leader = rows[0];
+                        leaders[race] = {
+                            candidate: leader.candidate,
+                            votes: leader.votes,
+                            share: leader.share,
+                            raceTotal: raceTotals[race][district]
+                        };
+                    });
+
+                    feature.properties.districtKey = district;
+                    feature.properties.leaders = leaders;
+                });
+
+                let geoJsonLayer;
+                let legendControl;
+                let currentRace = raceKeys[0];
+
+                function updateMap() {
+
+                    if (geoJsonLayer) {
+                        map.removeLayer(geoJsonLayer);
+                    }
+
+                    geoJsonLayer = L.geoJSON(geoJsonData, {
+                        style: function (feature) {
+                            const leader = feature.properties.leaders[currentRace];
+                            return {
+                                fillColor: leader ? getColor(leader.share) : noDataColor,
+                                weight: 2,
+                                opacity: 1,
+                                color: 'white',
+                                fillOpacity: 0.75
+                            };
+                        },
+                        onEachFeature: function (feature, layer) {
+                            const props = feature.properties;
+                            const district = props.districtKey;
+                            const leader = props.leaders[currentRace];
+
+                            let labelHtml = '<div class="label-district">District ' + district + '</div>';
+                            if (leader) {
+                                labelHtml += '<div class="label-leader">' + leader.candidate + '</div>';
+                                labelHtml += '<div class="label-numbers">' + leader.share.toFixed(1) + '%</div>';
+                            } else {
+                                labelHtml += '<div class="label-numbers">No results</div>';
+                            }
+
+                            layer.bindTooltip(labelHtml, {
+                                permanent: true,
+                                direction: 'center',
+                                className: 'district-label',
+                                opacity: 1
+                            });
+
+                            layer.on({
+                                click: function () {
+                                    let popupContent =
+                                        '<div class="custom-popup">' +
+                                        '<h3>District ' + district + '</h3>' +
+                                        '<div class="popup-race">' + currentRace + '</div>';
+
+                                    if (leader) {
+                                        popupContent +=
+                                            '<div class="metric-row"><span class="metric-label">Leader:</span>' +
+                                            '<span>' + leader.candidate + '</span></div>' +
+                                            '<div class="metric-row"><span class="metric-label">Votes:</span>' +
+                                            '<span>' + leader.votes.toLocaleString() + '</span></div>' +
+                                            '<div class="metric-row"><span class="metric-label">Total ballots:</span>' +
+                                            '<span>' + leader.raceTotal.toLocaleString() + '</span></div>' +
+                                            '<div class="metric-row"><span class="metric-label">Vote share:</span>' +
+                                            '<span>' + leader.share.toFixed(2) + '%</span></div>';
+                                    } else {
+                                        popupContent +=
+                                            '<div class="metric-row"><span>No votes recorded</span></div>';
+                                    }
+
+                                    popupContent += '</div>';
+                                    layer.bindPopup(popupContent).openPopup();
+                                },
+                                mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.92, weight: 3 }); },
+                                mouseout: function (e) { e.target.setStyle({ fillOpacity: 0.75, weight: 2 }); }
+                            });
+                        }
+                    }).addTo(map);
+
+                    if (legendControl) {
+                        map.removeControl(legendControl);
+                    }
+
+                    legendControl = L.control({ position: 'bottomright' });
+                    legendControl.onAdd = function () {
+                        const div = L.DomUtil.create('div', 'info legend');
+                        div.innerHTML = '<strong>Leader\'s vote share</strong><br><br>';
+
+                        for (let i = colors.length - 1; i >= 0; i--) {
+                            div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' +
+                                bandLabels[i] + '<br>';
+                        }
+
+                        return div;
+                    };
+                    legendControl.addTo(map);
+                }
+
+                const selectorControl = L.control({ position: 'topright' });
+                selectorControl.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'control-panel');
+                    div.innerHTML = '<label for="race-select"><strong>Select Race:</strong></label><br>';
+
+                    const select = document.createElement('select');
+                    select.id = 'race-select';
+
+                    raceKeys.forEach(race => {
+                        const option = document.createElement('option');
+                        option.value = race;
+                        option.textContent = race;
+                        if (race === currentRace) option.selected = true;
+                        select.appendChild(option);
+                    });
+                    div.appendChild(select);
+
+                    L.DomEvent.disableClickPropagation(div);
+                    L.DomEvent.disableScrollPropagation(div);
+
+                    L.DomEvent.on(select, 'change', function (e) {
+                        currentRace = e.target.value;
+                        updateMap();
+                    });
+
+                    return div;
+                };
+                selectorControl.addTo(map);
+
+                // Initial map load
+                updateMap();
+
+            })
+            .catch(error => {
+                showError('<strong>Could not load the map data</strong><br><br>' +
+                    error.message + '<br><br>The ' + CSV_FILE + 
+                    ' must sit in the same folder as this HTML file and  the GeoJson file must be in shape_files folder in the irectory, and it must be served over ' +
+                    'http (python -m http.server), not opened directly as a file.');
+                console.error(error);
+            });
+    </script>
+</body>
+
+</html>
