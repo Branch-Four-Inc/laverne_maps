@@ -77,6 +77,20 @@
             margin-right: 10px;
         }
 
+        .metric-star {
+            color: #b7791f;
+            font-weight: bold;
+            margin-left: 4px;
+        }
+
+        .significance-note {
+            margin-top: 6px;
+            padding-top: 5px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }
+
         .control-panel {
             background: white;
             padding: 10px 15px;
@@ -150,7 +164,7 @@
                 if (!response.ok) throw new Error('Failed to load GeoJSON');
                 return response.json();
             }),
-            fetch('housing_data_2019_2024.csv').then(response => {
+            fetch('housing_change_2019_2024.csv').then(response => {
                 if (!response.ok) throw new Error('Failed to load CSV');
                 return response.text();
             })
@@ -175,15 +189,23 @@
                             .replace(/^_+|_+$/g, '');
 
                         headerLabelMap[safeKey] = trimmed;
-                        console.log(trimmed, safeKey)
                         return safeKey;
                     }
                 });
 
                 let metricCleanKeys = [];
+                let significanceCleanKeys = [];
                 if (parsedCsv.data.length > 0) {
+                    significanceCleanKeys = Object.keys(parsedCsv.data[0]).filter(
+                        key => key.endsWith('_significant_90')
+                    );
                     metricCleanKeys = Object.keys(parsedCsv.data[0]).filter(
-                        key => key !== geoidCleanKey && key.toUpperCase() !== 'NAME' && key.toLowerCase() !== 'tract' && key !== 'Total_Housing_Units_2024'
+                        key => key !== geoidCleanKey
+                            && key.toUpperCase() !== 'NAME'
+                            && key.toLowerCase() !== 'tract'
+                            && key !== 'Total_Housing_Units_2024'
+                            && key.toLowerCase() !== 'is_approximate'
+                            && !key.endsWith('_significant_90')
                     );
 
                 }
@@ -192,6 +214,9 @@
                 parsedCsv.data.forEach(row => {
                     const metrics = {};
                     metricCleanKeys.forEach(key => {
+                        metrics[key] = row[key];
+                    });
+                    significanceCleanKeys.forEach(key => {
                         metrics[key] = row[key];
                     });
                     let rowKey = row[geoidCleanKey] ? String(row[geoidCleanKey]).trim() : '';
@@ -259,9 +284,31 @@
                     return prefix + absFormatted;
                 }
 
+                function getSignificanceKey(metricKey) {
+                    const baseKey = metricKey.replace(/_change$/, '');
+                    const directKey = `${baseKey}_significant_90`;
+                    if (significanceCleanKeys.includes(directKey)) return directKey;
+
+                    const unitsKey = `${baseKey}_units_significant_90`;
+                    if (significanceCleanKeys.includes(unitsKey)) return unitsKey;
+
+                    return null;
+                }
+
+                function isSignificant90(value) {
+                    return value === true || String(value).toLowerCase() === 'true';
+                }
+
+                function toTitleCase(label) {
+                    return label
+                        .replace(/_/g, ' ')
+                        .replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+                }
+
                 // Function to fully redraw/update the map layers and legend control
                 function updateMap() {
                     const originalLabel = headerLabelMap[currentMetricKey] || currentMetricKey;
+                    const displayLabel = toTitleCase(originalLabel);
                     const breakData = calculateRoundedBreaks(currentMetricKey);
                     const breaks = breakData.breaks;
 
@@ -296,7 +343,9 @@
 
                                     metricCleanKeys.forEach(cleanKey => {
                                         const value = metrics[cleanKey];
-                                        const label = headerLabelMap[cleanKey] || cleanKey;
+                                        const label = toTitleCase(headerLabelMap[cleanKey] || cleanKey);
+                                        const significanceKey = getSignificanceKey(cleanKey);
+                                        const isSignificant = significanceKey && isSignificant90(metrics[significanceKey]);
 
                                         let formattedValue = 'N/A';
                                         if (value !== undefined && value !== null) {
@@ -315,13 +364,13 @@
                                         const isCurrent = cleanKey === currentMetricKey;
                                         popupContent += `
                                             <div class="metric-row" ${isCurrent ? 'style="background-color: #f5f5f5; padding: 2px 0;"' : ''}>
-                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}:</span>
+                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}${isSignificant ? '<span class="metric-star" title="Significant at 90%">★</span>' : ''}:</span>
                                                 <span ${isCurrent ? 'style="font-weight: bold; color: #0570b0;"' : ''}>${formattedValue}</span>
                                             </div>
                                         `;
                                     });
 
-                                    popupContent += `</div>`;
+                                    popupContent += `<div class="significance-note">★ significant at 90% confidence level</div></div>`;
                                     layer.bindPopup(popupContent).openPopup();
                                 },
                                 mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.9, weight: 3 }); },
@@ -338,7 +387,7 @@
                     legendControl = L.control({ position: 'bottomright' });
                     legendControl.onAdd = function () {
                         const div = L.DomUtil.create('div', 'info legend');
-                        div.innerHTML = `<strong>${originalLabel}</strong><br><br>`;
+                        div.innerHTML = `<strong>${displayLabel}</strong><br><br>`;
 
                         // Construct clean range brackets using our rounded steps
                         div.innerHTML += `<i style="background:${colors[0]}"></i> ${formatLegendValue(breakData.min, originalLabel)} to ${formatLegendValue(breaks[0], originalLabel)}<br>`;
@@ -364,7 +413,7 @@
                     metricCleanKeys.forEach(cleanKey => {
                         const option = L.DomUtil.create('option', '', select);
                         option.value = cleanKey;
-                        option.textContent = headerLabelMap[cleanKey] || cleanKey;
+                        option.textContent = toTitleCase(headerLabelMap[cleanKey] || cleanKey);
                         if (cleanKey === currentMetricKey) option.selected = true;
                     });
 

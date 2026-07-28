@@ -77,6 +77,20 @@
             margin-right: 10px;
         }
 
+        .metric-star {
+            color: #b7791f;
+            font-weight: bold;
+            margin-left: 4px;
+        }
+
+        .significance-note {
+            margin-top: 6px;
+            padding-top: 5px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }
+
         .control-panel {
             background: white;
             padding: 10px 15px;
@@ -150,11 +164,11 @@
                 if (!response.ok) throw new Error('Failed to load GeoJSON');
                 return response.json();
             }),
-            fetch('population_data_2019_2024.csv').then(response => {
+            fetch('population_change_2019_2024.csv').then(response => {
                 if (!response.ok) throw new Error('Failed to load population CSV');
                 return response.text();
             }),
-            fetch('race_data_2019_2024.csv').then(response => {
+            fetch('race_change_2019_2024.csv').then(response => {
                 if (!response.ok) throw new Error('Failed to load race CSV');
                 return response.text();
             })
@@ -191,49 +205,64 @@
                     "total_pop_change",
                     "male_total_change",
                     "female_total_change",
-                    "0_19_Change",
-                    "20_39_Change",
-                    "40_59_Change",
-                    "60_79_Change",
-                    "80_Change"
+                    "age_0_19_change",
+                    "age_20_39_change",
+                    "age_40_59_change",
+                    "age_60_79_change",
+                    "age_80_plus_change"
                 ];
 
                 const raceMetricKeys = [
                     "white_change",
                     "black_change",
-                    "american_indian_change",
                     "asian_change",
-                    "pacific_islander_change",
                     "hispanic_latino_change",
                     "not_hispanic_change",
                     "two_or_more_races_change",
-                    "other_race_change",
+                ];
+
+                const populationSignificanceKeys = [
+                    "total_pop_significant_90",
+                    "male_total_significant_90",
+                    "female_total_significant_90",
+                    "age_0_19_significant_90",
+                    "age_20_39_significant_90",
+                    "age_40_59_significant_90",
+                    "age_60_79_significant_90",
+                    "age_80_plus_significant_90"
+                ];
+
+                const raceSignificanceKeys = [
+                    "white_significant_90",
+                    "black_significant_90",
+                    "asian_significant_90",
+                    "hispanic_latino_significant_90",
+                    "not_hispanic_significant_90",
+                    "two_or_more_races_significant_90"
                 ];
 
                 const metricCleanKeys = [...populationMetricKeys, ...raceMetricKeys];
+                const significanceCleanKeys = [...populationSignificanceKeys, ...raceSignificanceKeys];
 
                 headerLabelMap["total_pop_change"] = "Total Population Change";
                 headerLabelMap["male_total_change"] = "Male Population Change";
                 headerLabelMap["female_total_change"] = "Female Population Change";
-                headerLabelMap["0_19_Change"] = "Age 0–19 Change";
-                headerLabelMap["20_39_Change"] = "Age 20–39 Change";
-                headerLabelMap["40_59_Change"] = "Age 40–59 Change";
-                headerLabelMap["60_79_Change"] = "Age 60–79 Change";
-                headerLabelMap["80_Change"] = "Age 80+ Change";
+                headerLabelMap["age_0_19_change"] = "Age 0-19 Change";
+                headerLabelMap["age_20_39_change"] = "Age 20-39 Change";
+                headerLabelMap["age_40_59_change"] = "Age 40-59 Change";
+                headerLabelMap["age_60_79_change"] = "Age 60-79 Change";
+                headerLabelMap["age_80_plus_change"] = "Age 80+ Change";
                 headerLabelMap["not_hispanic_change"] = "Not Hispanic Change";
                 headerLabelMap["white_change"] = "White Change";
                 headerLabelMap["black_change"] = "Black Change";
-                headerLabelMap["american_indian_change"] = "American Indian Change";
                 headerLabelMap["asian_change"] = "Asian Change";
-                headerLabelMap["pacific_islander_change"] = "Pacific Islander Change";
-                headerLabelMap["other_race_change"] = "Other Race Change";
                 headerLabelMap["two_or_more_races_change"] = "Two or More Races Change";
                 headerLabelMap["hispanic_latino_change"] = "Hispanic/Latino Change";
 
                 const dataLookup = {};
                 const combinedRows = [];
 
-                function addRowsToLookup(rows, keys) {
+                function addRowsToLookup(rows, keys, significanceKeys) {
                     rows.forEach(row => {
                         let rowKey = row[geoidCleanKey] ? String(row[geoidCleanKey]).trim() : '';
                         if (rowKey.length === 10) rowKey = '0' + rowKey; // restore CA leading zero
@@ -243,13 +272,16 @@
                         keys.forEach(key => {
                             dataLookup[rowKey][key] = row[key];
                         });
+                        significanceKeys.forEach(key => {
+                            dataLookup[rowKey][key] = row[key];
+                        });
 
                         combinedRows.push(row);
                     });
                 }
 
-                addRowsToLookup(parsedPopulationCsv.data, populationMetricKeys);
-                addRowsToLookup(parsedRaceCsv.data, raceMetricKeys);
+                addRowsToLookup(parsedPopulationCsv.data, populationMetricKeys, populationSignificanceKeys);
+                addRowsToLookup(parsedRaceCsv.data, raceMetricKeys, raceSignificanceKeys);
 
                 geoJsonData.features.forEach(feature => {
                     const geoId = feature.properties.GEOID ? String(feature.properties.GEOID).trim() : '';
@@ -307,6 +339,18 @@
                     return val > 0 ? '+' + formatted : formatted;
                 }
 
+                function getSignificanceKey(metricKey) {
+                    const baseKey = metricKey.replace(/_change$/, '');
+                    const directKey = `${baseKey}_significant_90`;
+                    if (significanceCleanKeys.includes(directKey)) return directKey;
+
+                    return null;
+                }
+
+                function isSignificant90(value) {
+                    return value === true || String(value).toLowerCase() === 'true';
+                }
+
                 // Function to fully redraw/update the map layers and legend control
                 function updateMap() {
                     const originalLabel = headerLabelMap[currentMetricKey] || currentMetricKey;
@@ -345,6 +389,8 @@
                                     metricCleanKeys.forEach(cleanKey => {
                                         const value = metrics[cleanKey];
                                         const label = headerLabelMap[cleanKey] || cleanKey;
+                                        const significanceKey = getSignificanceKey(cleanKey);
+                                        const isSignificant = significanceKey && isSignificant90(metrics[significanceKey]);
 
                                         let formattedValue = 'N/A';
                                         if (value !== undefined && value !== null) {
@@ -358,13 +404,13 @@
                                         const isCurrent = cleanKey === currentMetricKey;
                                         popupContent += `
                                             <div class="metric-row" ${isCurrent ? 'style="background-color: #f5f5f5; padding: 2px 0;"' : ''}>
-                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}:</span>
+                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}${isSignificant ? '<span class="metric-star" title="Significant at 90%">★</span>' : ''}:</span>
                                                 <span ${isCurrent ? 'style="font-weight: bold; color: #0570b0;"' : ''}>${formattedValue}</span>
                                             </div>
                                         `;
                                     });
 
-                                    popupContent += `</div>`;
+                                    popupContent += `<div class="significance-note">★ significant at 90% confidence level</div></div>`;
                                     layer.bindPopup(popupContent).openPopup();
                                 },
                                 mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.9, weight: 3 }); },
