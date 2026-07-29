@@ -147,15 +147,16 @@
 
         // Core sequential color palette (5 classes)
         const colors = ['#ca0020', '#f4a582', '#c2c2c2', '#92c5de', '#0571b0'];
+        const countColors = ['#f7fbff', '#c6dbef', '#6baed6', '#2171b5', '#08306b'];
 
         // Helper function to color features based on calculated dynamic break steps
-        function getColor(value, breaks) {
+        function getColor(value, breaks, palette = colors) {
             if (value === undefined || value === null || isNaN(value)) return '#ccc';
-            if (value >= breaks[3]) return colors[4];
-            if (value >= breaks[2]) return colors[3];
-            if (value >= breaks[1]) return colors[2];
-            if (value >= breaks[0]) return colors[1];
-            return colors[0];
+            if (value >= breaks[3]) return palette[4];
+            if (value >= breaks[2]) return palette[3];
+            if (value >= breaks[1]) return palette[2];
+            if (value >= breaks[0]) return palette[1];
+            return palette[0];
         }
 
         // Asynchronously fetch geography and CSV data
@@ -202,6 +203,7 @@
                 const parsedRaceCsv = parseCsv(rawRaceCsvData);
 
                 const populationMetricKeys = [
+                    "total_population_2024",
                     "total_pop_change",
                     "male_total_change",
                     "female_total_change",
@@ -244,6 +246,7 @@
                 const metricCleanKeys = [...populationMetricKeys, ...raceMetricKeys];
                 const significanceCleanKeys = [...populationSignificanceKeys, ...raceSignificanceKeys];
 
+                headerLabelMap["total_population_2024"] = "Total Population 2024";
                 headerLabelMap["total_pop_change"] = "Total Population Change";
                 headerLabelMap["male_total_change"] = "Male Population Change";
                 headerLabelMap["female_total_change"] = "Female Population Change";
@@ -318,6 +321,21 @@
 
                     let min = values[0];
                     let max = values[values.length - 1];
+                    const range = max - min;
+
+                    if (!isChangeMetric(metricKey)) {
+                        return {
+                            min: min,
+                            max: max,
+                            breaks: [
+                                roundToCleanValue(min + range * 0.2, range),
+                                roundToCleanValue(min + range * 0.4, range),
+                                roundToCleanValue(min + range * 0.6, range),
+                                roundToCleanValue(min + range * 0.8, range)
+                            ]
+                        };
+                    }
+
                     const maxAbs = Math.max(Math.abs(min), Math.abs(max));
 
                     // Symmetric breaks around zero: grey band = small changes near 0
@@ -334,9 +352,17 @@
                 }
 
                 // Helper to cleanly format numbers based on context label
-                function formatLegendValue(val, label) {
+                function isChangeMetric(metricKey) {
+                    return metricKey.endsWith('_change');
+                }
+
+                function formatLegendValue(val, metricKey) {
                     const formatted = val.toLocaleString(undefined, { maximumFractionDigits: 0 });
-                    return val > 0 ? '+' + formatted : formatted;
+                    return isChangeMetric(metricKey) && val > 0 ? '+' + formatted : formatted;
+                }
+
+                function getMetricColors(metricKey) {
+                    return isChangeMetric(metricKey) ? colors : countColors;
                 }
 
                 function getSignificanceKey(metricKey) {
@@ -356,6 +382,7 @@
                     const originalLabel = headerLabelMap[currentMetricKey] || currentMetricKey;
                     const breakData = calculateRoundedBreaks(currentMetricKey);
                     const breaks = breakData.breaks;
+                    const palette = getMetricColors(currentMetricKey);
 
                     // A. Remove existing layer
                     if (geoJsonLayer) {
@@ -367,7 +394,7 @@
                         style: function (feature) {
                             const value = feature.properties.csvMetrics[currentMetricKey];
                             return {
-                                fillColor: getColor(value, breaks),
+                                fillColor: getColor(value, breaks, palette),
                                 weight: 2,
                                 opacity: 1,
                                 color: 'white',
@@ -395,7 +422,7 @@
                                         let formattedValue = 'N/A';
                                         if (value !== undefined && value !== null) {
                                             if (typeof value === 'number') {
-                                                formattedValue = value > 0 ? '+' + value.toLocaleString() : value.toLocaleString();
+                                                formattedValue = isChangeMetric(cleanKey) && value > 0 ? '+' + value.toLocaleString() : value.toLocaleString();
                                             } else {
                                                 formattedValue = value;
                                             }
@@ -430,11 +457,19 @@
                         div.innerHTML = `<strong>${originalLabel}</strong><br><br>`;
 
                         // Construct clean range brackets using our rounded steps
-                        div.innerHTML += `<i style="background:${colors[0]}"></i> ${formatLegendValue(breakData.min, originalLabel)} to ${formatLegendValue(breaks[0], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[1]}"></i> ${formatLegendValue(breaks[0], originalLabel)} to ${formatLegendValue(breaks[1], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[2]}"></i> ${formatLegendValue(breaks[1], originalLabel)} to ${formatLegendValue(breaks[2], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[3]}"></i> ${formatLegendValue(breaks[2], originalLabel)} to ${formatLegendValue(breaks[3], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[4]}"></i> ${formatLegendValue(breaks[3], originalLabel)} to ${formatLegendValue(breakData.max, originalLabel)}`;
+                        if (isChangeMetric(currentMetricKey)) {
+                            div.innerHTML += `<i style="background:${palette[0]}"></i> ${formatLegendValue(breakData.min, currentMetricKey)} to ${formatLegendValue(breaks[0], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[1]}"></i> ${formatLegendValue(breaks[0], currentMetricKey)} to ${formatLegendValue(breaks[1], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[2]}"></i> ${formatLegendValue(breaks[1], currentMetricKey)} to ${formatLegendValue(breaks[2], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[3]}"></i> ${formatLegendValue(breaks[2], currentMetricKey)} to ${formatLegendValue(breaks[3], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[4]}"></i> ${formatLegendValue(breaks[3], currentMetricKey)} to ${formatLegendValue(breakData.max, currentMetricKey)}`;
+                        } else {
+                            div.innerHTML += `<i style="background:${palette[0]}"></i> Under ${formatLegendValue(breaks[0], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[1]}"></i> ${formatLegendValue(breaks[0], currentMetricKey)} to ${formatLegendValue(breaks[1], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[2]}"></i> ${formatLegendValue(breaks[1], currentMetricKey)} to ${formatLegendValue(breaks[2], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[3]}"></i> ${formatLegendValue(breaks[2], currentMetricKey)} to ${formatLegendValue(breaks[3], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[4]}"></i> ${formatLegendValue(breaks[3], currentMetricKey)} or more`;
+                        }
 
                         return div;
                     };
