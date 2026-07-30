@@ -59,7 +59,7 @@
         .custom-popup {
             font-size: 14px;
             line-height: 1.4;
-            min-width: 210px;
+            min-width: 240px;
         }
 
         .custom-popup h3 {
@@ -75,6 +75,70 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 8px;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .results-table th {
+            text-align: left;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #7f8c8d;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+            padding: 0 8px 4px 0;
+        }
+
+        .results-table td {
+            padding: 5px 8px 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #2c3e50;
+        }
+
+        .results-table th.num,
+        .results-table td.num {
+            text-align: right;
+            padding-left: 16px;
+            padding-right: 0;
+            white-space: nowrap;
+        }
+
+        .results-table tr.leader-row td {
+            font-weight: bold;
+        }
+
+        .candidate-swatch {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 2px;
+            margin-right: 6px;
+            vertical-align: middle;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+        }
+
+        .popup-toggle {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #2b6cb0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .popup-toggle:hover {
+            text-decoration: underline;
+        }
+
+        .popup-total {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #7f8c8d;
         }
 
         .metric-row {
@@ -109,31 +173,32 @@
 
         .info.legend {
             background: white;
-            padding: 10px;
+            padding: 10px 12px;
             font-size: 12px;
-            line-height: 18px;
+            line-height: 16px;
             color: #555;
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-            max-width: 220px;
+            max-width: 210px;
         }
 
-        .info.legend i {
-            width: 18px;
-            height: 18px;
-            float: left;
+        .legend-row {
+            display: flex;
+            align-items: flex-start;
+            margin: 5px 0 0 0;
+        }
+
+        .legend-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
             margin-right: 8px;
-            opacity: 0.7;
+            flex: 0 0 auto;
+            border: 1px solid rgba(0, 0, 0, 0.15);
         }
 
-        .legend-note {
-            clear: both;
-            margin-top: 8px;
-            padding-top: 6px;
-            border-top: 1px solid #eee;
-            font-size: 11px;
-            color: #7f8c8d;
-            line-height: 15px;
+        .legend-name {
+            color: #2c3e50;
         }
 
         .district-label {
@@ -210,26 +275,38 @@
             }
 
             .info.legend {
-                max-width: 140px;
+                max-width: 145px;
                 font-size: 10px;
-                line-height: 14px;
+                line-height: 13px;
                 padding: 8px;
             }
 
-            .info.legend i {
-                width: 14px;
-                height: 14px;
+            .legend-swatch {
+                width: 11px;
+                height: 11px;
                 margin-right: 6px;
-            }
-
-            .legend-note {
-                font-size: 10px;
-                line-height: 13px;
             }
 
             .custom-popup {
                 min-width: 0;
-                font-size: 13px;
+                font-size: 12px;
+            }
+
+            .results-table {
+                font-size: 12px;
+            }
+
+            .results-table th {
+                font-size: 9px;
+            }
+
+            .results-table td {
+                padding: 4px 6px 4px 0;
+            }
+
+            .results-table td.num,
+            .results-table th.num {
+                padding-left: 12px;
             }
 
             .district-label {
@@ -268,29 +345,18 @@
             attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
         }).addTo(map);
 
-        const colors = ['#f2f0f7', '#cbc9e2', '#9e9ac8', '#756bb1', '#54278f'];
-
-        const breaks = [40, 50, 60, 80];
-
-        const bandLabels = [
-            'Under 40%',
-            '40% to 50%',
-            '50% to 60%',
-            '60% to 80%',
-            '80% and above'
+        const candidatePalette = [
+            '#4e79a7',
+            '#f28e2b',
+            '#59a14f',
+            '#b07aa1',
+            '#76b7b2',
+            '#edc948',
+            '#9c755f',
+            '#ff9da7'
         ];
 
         const noDataColor = '#ccc';
-
-        // Helper function to color features from the leader's vote share
-        function getColor(share) {
-            if (share === undefined || share === null || isNaN(share)) return noDataColor;
-            if (share >= breaks[3]) return colors[4];
-            if (share >= breaks[2]) return colors[3];
-            if (share >= breaks[1]) return colors[2];
-            if (share >= breaks[0]) return colors[1];
-            return colors[0];
-        }
 
         // Council districts arrive as "1ST", "2ND" in the CSV but "1", "2" in the
         // GeoJSON. Reduce both sides to bare digits so the join always matches.
@@ -390,13 +456,46 @@
                     return;
                 }
 
+                const raceCandidates = {};
+                const candidateColors = {};
+
+                raceKeys.forEach(race => {
+                    const cityWideVotes = {};
+
+                    Object.keys(raceResults[race]).forEach(district => {
+                        raceResults[race][district].forEach(row => {
+                            cityWideVotes[row.candidate] =
+                                (cityWideVotes[row.candidate] || 0) + row.votes;
+                        });
+                    });
+
+                    const ordered = Object.keys(cityWideVotes)
+                        .sort((a, b) => cityWideVotes[b] - cityWideVotes[a]);
+
+                    raceCandidates[race] = ordered;
+                    candidateColors[race] = {};
+
+                    ordered.forEach((candidate, index) => {
+                        candidateColors[race][candidate] =
+                            candidatePalette[index % candidatePalette.length];
+                    });
+                });
+
+                function colorFor(race, candidate) {
+                    if (!race || !candidate) return noDataColor;
+                    return (candidateColors[race] || {})[candidate] || noDataColor;
+                }
+
                 // Attach the leader of every race to the matching district
                 geoJsonData.features.forEach(feature => {
                     const district = normalizeDistrict(feature.properties.district);
                     const leaders = {};
+                    const results = {};
 
                     raceKeys.forEach(race => {
                         const rows = (raceResults[race] || {})[district] || [];
+                        results[race] = rows;
+
                         if (rows.length === 0 || raceTotals[race][district] === 0) {
                             leaders[race] = null;
                             return;
@@ -412,12 +511,14 @@
 
                     feature.properties.districtKey = district;
                     feature.properties.leaders = leaders;
+                    feature.properties.results = results;
                 });
 
                 let geoJsonLayer;
                 let legendControl;
                 let currentRace = raceKeys[0];
                 let hasFitBounds = false;
+                let popupCounter = 0;
 
                 function updateMap() {
 
@@ -429,7 +530,7 @@
                         style: function (feature) {
                             const leader = feature.properties.leaders[currentRace];
                             return {
-                                fillColor: leader ? getColor(leader.share) : noDataColor,
+                                fillColor: leader ? colorFor(currentRace, leader.candidate) : noDataColor,
                                 weight: 2,
                                 opacity: 1,
                                 color: 'white',
@@ -440,6 +541,7 @@
                             const props = feature.properties;
                             const district = props.districtKey;
                             const leader = props.leaders[currentRace];
+                            const rows = props.results[currentRace] || [];
 
                             let labelHtml = '<div class="label-district">District ' + district + '</div>';
                             if (leader) {
@@ -458,28 +560,81 @@
 
                             layer.on({
                                 click: function () {
-                                    let popupContent =
-                                        '<div class="custom-popup">' +
-                                        '<h3>District ' + district + '</h3>' +
-                                        '<div class="popup-race">' + currentRace + '</div>';
+                                    const toggleId = 'candidate-toggle-' + (++popupCounter);
+                                    let expanded = false;
 
-                                    if (leader) {
-                                        popupContent +=
-                                            '<div class="metric-row"><span class="metric-label">Leader:</span>' +
-                                            '<span>' + leader.candidate + '</span></div>' +
-                                            '<div class="metric-row"><span class="metric-label">Votes:</span>' +
-                                            '<span>' + leader.votes.toLocaleString() + '</span></div>' +
-                                            '<div class="metric-row"><span class="metric-label">Total ballots:</span>' +
-                                            '<span>' + leader.raceTotal.toLocaleString() + '</span></div>' +
-                                            '<div class="metric-row"><span class="metric-label">Vote share:</span>' +
-                                            '<span>' + leader.share.toFixed(2) + '%</span></div>';
-                                    } else {
-                                        popupContent +=
-                                            '<div class="metric-row"><span>No votes recorded</span></div>';
+                                    function buildPopupHtml() {
+                                        let html =
+                                            '<div class="custom-popup">' +
+                                            '<h3>District ' + district + '</h3>' +
+                                            '<div class="popup-race">' + currentRace + '</div>';
+
+                                        if (rows.length > 0) {
+                                            const visible = expanded ? rows : rows.slice(0, 3);
+                                            const hidden = rows.length - visible.length;
+
+                                            html +=
+                                                '<table class="results-table"><thead><tr>' +
+                                                '<th>Candidate</th>' +
+                                                '<th class="num">Votes</th>' +
+                                                '<th class="num">Share</th>' +
+                                                '</tr></thead><tbody>';
+
+                                            visible.forEach((row, index) => {
+                                                const swatch = colorFor(currentRace, row.candidate);
+                                                const shareText = isNaN(row.share)
+                                                    ? '&mdash;'
+                                                    : row.share.toFixed(1) + '%';
+
+                                                html +=
+                                                    '<tr' + (index === 0 ? ' class="leader-row"' : '') + '>' +
+                                                    '<td><span class="candidate-swatch" style="background:' +
+                                                    swatch + '"></span>' + row.candidate + '</td>' +
+                                                    '<td class="num">' + row.votes.toLocaleString() + '</td>' +
+                                                    '<td class="num">' + shareText + '</td>' +
+                                                    '</tr>';
+                                            });
+
+                                            html += '</tbody></table>';
+
+                                            if (hidden > 0) {
+                                                html += '<span class="popup-toggle" id="' + toggleId + '">+ ' +
+                                                    hidden + ' other candidate' + (hidden === 1 ? '' : 's') +
+                                                    '</span>';
+                                            } else if (rows.length > 3) {
+                                                html += '<span class="popup-toggle" id="' + toggleId +
+                                                    '">Show fewer</span>';
+                                            }
+
+                                            if (leader) {
+                                                html += '<div class="popup-total">Total ballots: ' +
+                                                    leader.raceTotal.toLocaleString() + '</div>';
+                                            }
+                                        } else {
+                                            html +=
+                                                '<div class="metric-row"><span>No votes recorded</span></div>';
+                                        }
+
+                                        return html + '</div>';
                                     }
 
-                                    popupContent += '</div>';
-                                    layer.bindPopup(popupContent).openPopup();
+                                    function attachToggle() {
+                                        const link = document.getElementById(toggleId);
+                                        if (!link) return;
+                                        L.DomEvent.on(link, 'click', function (e) {
+                                            L.DomEvent.stop(e);
+                                            expanded = !expanded;
+                                            layer.setPopupContent(buildPopupHtml());
+                                            attachToggle();
+                                        });
+                                    }
+
+                                    layer.bindPopup(buildPopupHtml(), {
+                                        maxWidth: 320,
+                                        maxHeight: isSmallScreen() ? 260 : 420
+                                    }).openPopup();
+
+                                    attachToggle();
                                 },
                                 mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.92, weight: 3 }); },
                                 mouseout: function (e) { e.target.setStyle({ fillOpacity: 0.75, weight: 2 }); }
@@ -499,12 +654,15 @@
                     legendControl = L.control({ position: 'bottomright' });
                     legendControl.onAdd = function () {
                         const div = L.DomUtil.create('div', 'info legend');
-                        div.innerHTML = '<strong>Leader\'s vote share</strong><br><br>';
+                        div.innerHTML = '<strong>Leading candidate</strong>';
 
-                        for (let i = colors.length - 1; i >= 0; i--) {
-                            div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' +
-                                bandLabels[i] + '<br>';
-                        }
+                        (raceCandidates[currentRace] || []).forEach(candidate => {
+                            div.innerHTML += '<div class="legend-row">' +
+                                '<span class="legend-swatch" style="background:' +
+                                colorFor(currentRace, candidate) + '"></span>' +
+                                '<span class="legend-name">' + candidate + '</span>' +
+                                '</div>';
+                        });
 
                         return div;
                     };
