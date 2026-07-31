@@ -77,6 +77,20 @@
             margin-right: 10px;
         }
 
+        .metric-star {
+            color: #b7791f;
+            font-weight: bold;
+            margin-left: 4px;
+        }
+
+        .significance-note {
+            margin-top: 6px;
+            padding-top: 5px;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 12px;
+        }
+
         .control-panel {
             background: white;
             padding: 10px 15px;
@@ -133,15 +147,16 @@
 
         // Core sequential color palette (5 classes)
         const colors = ['#ca0020', '#f4a582', '#c2c2c2', '#92c5de', '#0571b0'];
+        const countColors = ['#f7fbff', '#c6dbef', '#6baed6', '#2171b5', '#08306b'];
 
         // Helper function to color features based on calculated dynamic break steps
-        function getColor(value, breaks) {
+        function getColor(value, breaks, palette = colors) {
             if (value === undefined || value === null || isNaN(value)) return '#ccc';
-            if (value >= breaks[3]) return colors[4];
-            if (value >= breaks[2]) return colors[3];
-            if (value >= breaks[1]) return colors[2];
-            if (value >= breaks[0]) return colors[1];
-            return colors[0];
+            if (value >= breaks[3]) return palette[4];
+            if (value >= breaks[2]) return palette[3];
+            if (value >= breaks[1]) return palette[2];
+            if (value >= breaks[0]) return palette[1];
+            return palette[0];
         }
 
         // Asynchronously fetch geography and CSV data
@@ -150,11 +165,11 @@
                 if (!response.ok) throw new Error('Failed to load GeoJSON');
                 return response.json();
             }),
-            fetch('population_data_2019_2024.csv').then(response => {
+            fetch('population_change_2019_2024.csv').then(response => {
                 if (!response.ok) throw new Error('Failed to load population CSV');
                 return response.text();
             }),
-            fetch('race_data_2019_2024.csv').then(response => {
+            fetch('race_change_2019_2024.csv').then(response => {
                 if (!response.ok) throw new Error('Failed to load race CSV');
                 return response.text();
             })
@@ -188,52 +203,69 @@
                 const parsedRaceCsv = parseCsv(rawRaceCsvData);
 
                 const populationMetricKeys = [
+                    "total_population_2024",
                     "total_pop_change",
                     "male_total_change",
                     "female_total_change",
-                    "0_19_Change",
-                    "20_39_Change",
-                    "40_59_Change",
-                    "60_79_Change",
-                    "80_Change"
+                    "age_0_19_change",
+                    "age_20_39_change",
+                    "age_40_59_change",
+                    "age_60_79_change",
+                    "age_80_plus_change"
                 ];
 
                 const raceMetricKeys = [
                     "white_change",
                     "black_change",
-                    "american_indian_change",
                     "asian_change",
-                    "pacific_islander_change",
                     "hispanic_latino_change",
                     "not_hispanic_change",
                     "two_or_more_races_change",
-                    "other_race_change",
+                ];
+
+                const populationSignificanceKeys = [
+                    "total_pop_significant_90",
+                    "male_total_significant_90",
+                    "female_total_significant_90",
+                    "age_0_19_significant_90",
+                    "age_20_39_significant_90",
+                    "age_40_59_significant_90",
+                    "age_60_79_significant_90",
+                    "age_80_plus_significant_90"
+                ];
+
+                const raceSignificanceKeys = [
+                    "white_significant_90",
+                    "black_significant_90",
+                    "asian_significant_90",
+                    "hispanic_latino_significant_90",
+                    "not_hispanic_significant_90",
+                    "two_or_more_races_significant_90"
                 ];
 
                 const metricCleanKeys = [...populationMetricKeys, ...raceMetricKeys];
+                const significanceCleanKeys = [...populationSignificanceKeys, ...raceSignificanceKeys];
 
+                headerLabelMap["total_population_2024"] = "Total Population 2024";
                 headerLabelMap["total_pop_change"] = "Total Population Change";
                 headerLabelMap["male_total_change"] = "Male Population Change";
                 headerLabelMap["female_total_change"] = "Female Population Change";
-                headerLabelMap["0_19_Change"] = "Age 0–19 Change";
-                headerLabelMap["20_39_Change"] = "Age 20–39 Change";
-                headerLabelMap["40_59_Change"] = "Age 40–59 Change";
-                headerLabelMap["60_79_Change"] = "Age 60–79 Change";
-                headerLabelMap["80_Change"] = "Age 80+ Change";
+                headerLabelMap["age_0_19_change"] = "Age 0-19 Change";
+                headerLabelMap["age_20_39_change"] = "Age 20-39 Change";
+                headerLabelMap["age_40_59_change"] = "Age 40-59 Change";
+                headerLabelMap["age_60_79_change"] = "Age 60-79 Change";
+                headerLabelMap["age_80_plus_change"] = "Age 80+ Change";
                 headerLabelMap["not_hispanic_change"] = "Not Hispanic Change";
                 headerLabelMap["white_change"] = "White Change";
                 headerLabelMap["black_change"] = "Black Change";
-                headerLabelMap["american_indian_change"] = "American Indian Change";
                 headerLabelMap["asian_change"] = "Asian Change";
-                headerLabelMap["pacific_islander_change"] = "Pacific Islander Change";
-                headerLabelMap["other_race_change"] = "Other Race Change";
                 headerLabelMap["two_or_more_races_change"] = "Two or More Races Change";
                 headerLabelMap["hispanic_latino_change"] = "Hispanic/Latino Change";
 
                 const dataLookup = {};
                 const combinedRows = [];
 
-                function addRowsToLookup(rows, keys) {
+                function addRowsToLookup(rows, keys, significanceKeys) {
                     rows.forEach(row => {
                         let rowKey = row[geoidCleanKey] ? String(row[geoidCleanKey]).trim() : '';
                         if (rowKey.length === 10) rowKey = '0' + rowKey; // restore CA leading zero
@@ -243,13 +275,16 @@
                         keys.forEach(key => {
                             dataLookup[rowKey][key] = row[key];
                         });
+                        significanceKeys.forEach(key => {
+                            dataLookup[rowKey][key] = row[key];
+                        });
 
                         combinedRows.push(row);
                     });
                 }
 
-                addRowsToLookup(parsedPopulationCsv.data, populationMetricKeys);
-                addRowsToLookup(parsedRaceCsv.data, raceMetricKeys);
+                addRowsToLookup(parsedPopulationCsv.data, populationMetricKeys, populationSignificanceKeys);
+                addRowsToLookup(parsedRaceCsv.data, raceMetricKeys, raceSignificanceKeys);
 
                 geoJsonData.features.forEach(feature => {
                     const geoId = feature.properties.GEOID ? String(feature.properties.GEOID).trim() : '';
@@ -286,6 +321,21 @@
 
                     let min = values[0];
                     let max = values[values.length - 1];
+                    const range = max - min;
+
+                    if (!isChangeMetric(metricKey)) {
+                        return {
+                            min: min,
+                            max: max,
+                            breaks: [
+                                roundToCleanValue(min + range * 0.2, range),
+                                roundToCleanValue(min + range * 0.4, range),
+                                roundToCleanValue(min + range * 0.6, range),
+                                roundToCleanValue(min + range * 0.8, range)
+                            ]
+                        };
+                    }
+
                     const maxAbs = Math.max(Math.abs(min), Math.abs(max));
 
                     // Symmetric breaks around zero: grey band = small changes near 0
@@ -302,9 +352,29 @@
                 }
 
                 // Helper to cleanly format numbers based on context label
-                function formatLegendValue(val, label) {
+                function isChangeMetric(metricKey) {
+                    return metricKey.endsWith('_change');
+                }
+
+                function formatLegendValue(val, metricKey) {
                     const formatted = val.toLocaleString(undefined, { maximumFractionDigits: 0 });
-                    return val > 0 ? '+' + formatted : formatted;
+                    return isChangeMetric(metricKey) && val > 0 ? '+' + formatted : formatted;
+                }
+
+                function getMetricColors(metricKey) {
+                    return isChangeMetric(metricKey) ? colors : countColors;
+                }
+
+                function getSignificanceKey(metricKey) {
+                    const baseKey = metricKey.replace(/_change$/, '');
+                    const directKey = `${baseKey}_significant_90`;
+                    if (significanceCleanKeys.includes(directKey)) return directKey;
+
+                    return null;
+                }
+
+                function isSignificant90(value) {
+                    return value === true || String(value).toLowerCase() === 'true';
                 }
 
                 // Function to fully redraw/update the map layers and legend control
@@ -312,6 +382,7 @@
                     const originalLabel = headerLabelMap[currentMetricKey] || currentMetricKey;
                     const breakData = calculateRoundedBreaks(currentMetricKey);
                     const breaks = breakData.breaks;
+                    const palette = getMetricColors(currentMetricKey);
 
                     // A. Remove existing layer
                     if (geoJsonLayer) {
@@ -323,7 +394,7 @@
                         style: function (feature) {
                             const value = feature.properties.csvMetrics[currentMetricKey];
                             return {
-                                fillColor: getColor(value, breaks),
+                                fillColor: getColor(value, breaks, palette),
                                 weight: 2,
                                 opacity: 1,
                                 color: 'white',
@@ -345,11 +416,13 @@
                                     metricCleanKeys.forEach(cleanKey => {
                                         const value = metrics[cleanKey];
                                         const label = headerLabelMap[cleanKey] || cleanKey;
+                                        const significanceKey = getSignificanceKey(cleanKey);
+                                        const isSignificant = significanceKey && isSignificant90(metrics[significanceKey]);
 
                                         let formattedValue = 'N/A';
                                         if (value !== undefined && value !== null) {
                                             if (typeof value === 'number') {
-                                                formattedValue = value > 0 ? '+' + value.toLocaleString() : value.toLocaleString();
+                                                formattedValue = isChangeMetric(cleanKey) && value > 0 ? '+' + value.toLocaleString() : value.toLocaleString();
                                             } else {
                                                 formattedValue = value;
                                             }
@@ -358,13 +431,13 @@
                                         const isCurrent = cleanKey === currentMetricKey;
                                         popupContent += `
                                             <div class="metric-row" ${isCurrent ? 'style="background-color: #f5f5f5; padding: 2px 0;"' : ''}>
-                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}:</span>
+                                                <span class="metric-label">${isCurrent ? '>> ' : ''}${label}${isSignificant ? '<span class="metric-star" title="Significant at 90%">★</span>' : ''}:</span>
                                                 <span ${isCurrent ? 'style="font-weight: bold; color: #0570b0;"' : ''}>${formattedValue}</span>
                                             </div>
                                         `;
                                     });
 
-                                    popupContent += `</div>`;
+                                    popupContent += `<div class="significance-note">★ significant at 90% confidence level</div></div>`;
                                     layer.bindPopup(popupContent).openPopup();
                                 },
                                 mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.9, weight: 3 }); },
@@ -384,11 +457,19 @@
                         div.innerHTML = `<strong>${originalLabel}</strong><br><br>`;
 
                         // Construct clean range brackets using our rounded steps
-                        div.innerHTML += `<i style="background:${colors[0]}"></i> ${formatLegendValue(breakData.min, originalLabel)} to ${formatLegendValue(breaks[0], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[1]}"></i> ${formatLegendValue(breaks[0], originalLabel)} to ${formatLegendValue(breaks[1], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[2]}"></i> ${formatLegendValue(breaks[1], originalLabel)} to ${formatLegendValue(breaks[2], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[3]}"></i> ${formatLegendValue(breaks[2], originalLabel)} to ${formatLegendValue(breaks[3], originalLabel)}<br>`;
-                        div.innerHTML += `<i style="background:${colors[4]}"></i> ${formatLegendValue(breaks[3], originalLabel)} to ${formatLegendValue(breakData.max, originalLabel)}`;
+                        if (isChangeMetric(currentMetricKey)) {
+                            div.innerHTML += `<i style="background:${palette[0]}"></i> ${formatLegendValue(breakData.min, currentMetricKey)} to ${formatLegendValue(breaks[0], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[1]}"></i> ${formatLegendValue(breaks[0], currentMetricKey)} to ${formatLegendValue(breaks[1], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[2]}"></i> ${formatLegendValue(breaks[1], currentMetricKey)} to ${formatLegendValue(breaks[2], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[3]}"></i> ${formatLegendValue(breaks[2], currentMetricKey)} to ${formatLegendValue(breaks[3], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[4]}"></i> ${formatLegendValue(breaks[3], currentMetricKey)} to ${formatLegendValue(breakData.max, currentMetricKey)}`;
+                        } else {
+                            div.innerHTML += `<i style="background:${palette[0]}"></i> Under ${formatLegendValue(breaks[0], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[1]}"></i> ${formatLegendValue(breaks[0], currentMetricKey)} to ${formatLegendValue(breaks[1], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[2]}"></i> ${formatLegendValue(breaks[1], currentMetricKey)} to ${formatLegendValue(breaks[2], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[3]}"></i> ${formatLegendValue(breaks[2], currentMetricKey)} to ${formatLegendValue(breaks[3], currentMetricKey)}<br>`;
+                            div.innerHTML += `<i style="background:${palette[4]}"></i> ${formatLegendValue(breaks[3], currentMetricKey)} or more`;
+                        }
 
                         return div;
                     };
