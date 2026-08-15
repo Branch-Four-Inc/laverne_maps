@@ -2,4 +2,5 @@
 Maps for La Verne Daily News
 
 * Housing map: https://branch-four-inc.github.io/laverne_maps/housing_maps/housing
-* Population map: https://branch-four-inc.github.io/laverne_maps/population_maps/population 
+* Population map: https://branch-four-inc.github.io/laverne_maps/population_maps/population
+* Election map: https://branch-four-inc.github.io/laverne_maps/election_maps/election
