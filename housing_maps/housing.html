@@ -194,19 +194,23 @@
                     }
                 });
 
+                // Keep the Housing map focused on the five published metrics.
+                const housingMetricKeys = [
+                    'total_housing_units_2024',
+                    'owner_occupied_change',
+                    'renter_occupied_change',
+                    'median_gross_rent_change',
+                    'median_owner_costs_change'
+                ];
+
                 let metricCleanKeys = [];
                 let significanceCleanKeys = [];
                 if (parsedCsv.data.length > 0) {
                     significanceCleanKeys = Object.keys(parsedCsv.data[0]).filter(
                         key => key.endsWith('_significant_90')
                     );
-                    metricCleanKeys = Object.keys(parsedCsv.data[0]).filter(
-                        key => key !== geoidCleanKey
-                            && key.toUpperCase() !== 'NAME'
-                            && key.toLowerCase() !== 'tract'
-                            && key !== 'Total_Housing_Units_2024'
-                            && key.toLowerCase() !== 'is_approximate'
-                            && !key.endsWith('_significant_90')
+                    metricCleanKeys = housingMetricKeys.filter(key =>
+                        Object.prototype.hasOwnProperty.call(parsedCsv.data[0], key)
                     );
 
                 }
@@ -346,28 +350,7 @@
                 }
 
                 function getDropdownMetricKeys() {
-                    const medianKeys = ['median_gross_rent_change', 'median_owner_costs_change'];
-                    const unitTypeKeys = [
-                        'one_unit_detached_change',
-                        'one_unit_attached_change',
-                        'two_units_change',
-                        'three_or_four_units_change',
-                        'five_to_nine_units_change',
-                        'ten_to_nineteen_units_change',
-                        'twenty_to_forty_nine_units_change',
-                        'fifty_or_more_units_change'
-                    ];
-
-                    const keySet = new Set([...medianKeys, ...unitTypeKeys]);
-                    const firstUnitIndex = metricCleanKeys.findIndex(key => unitTypeKeys.includes(key));
-                    if (firstUnitIndex === -1) return metricCleanKeys;
-
-                    return [
-                        ...metricCleanKeys.slice(0, firstUnitIndex).filter(key => !keySet.has(key)),
-                        ...medianKeys.filter(key => metricCleanKeys.includes(key)),
-                        ...unitTypeKeys.filter(key => metricCleanKeys.includes(key)),
-                        ...metricCleanKeys.slice(firstUnitIndex).filter(key => !keySet.has(key))
-                    ];
+                    return metricCleanKeys;
                 }
 
                 // Function to fully redraw/update the map layers and legend control
