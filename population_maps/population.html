@@ -212,46 +212,33 @@
 
                 const populationMetricKeys = [
                     "total_population_2024",
-                    "total_pop_change",
-                    "male_total_change",
-                    "female_total_change",
-                    "age_0_19_change",
-                    "age_20_39_change",
-                    "age_40_59_change",
-                    "age_60_79_change",
-                    "age_80_plus_change"
+                    "age_20_39_change"
                 ];
 
                 const raceMetricKeys = [
                     "white_change",
-                    "black_change",
-                    "asian_change",
-                    "hispanic_latino_change",
                     "not_hispanic_change",
-                    "two_or_more_races_change",
+                    "two_or_more_races_change"
                 ];
 
                 const populationSignificanceKeys = [
-                    "total_pop_significant_90",
-                    "male_total_significant_90",
-                    "female_total_significant_90",
-                    "age_0_19_significant_90",
-                    "age_20_39_significant_90",
-                    "age_40_59_significant_90",
-                    "age_60_79_significant_90",
-                    "age_80_plus_significant_90"
+                    "age_20_39_significant_90"
                 ];
 
                 const raceSignificanceKeys = [
                     "white_significant_90",
-                    "black_significant_90",
-                    "asian_significant_90",
-                    "hispanic_latino_significant_90",
                     "not_hispanic_significant_90",
                     "two_or_more_races_significant_90"
                 ];
 
-                const metricCleanKeys = [...populationMetricKeys, ...raceMetricKeys];
+                // Keep the Population map focused on the five published metrics.
+                const metricCleanKeys = [
+                    "total_population_2024",
+                    "white_change",
+                    "not_hispanic_change",
+                    "two_or_more_races_change",
+                    "age_20_39_change"
+                ];
                 const significanceCleanKeys = [...populationSignificanceKeys, ...raceSignificanceKeys];
 
                 headerLabelMap["total_population_2024"] = "Total Population 2024";
