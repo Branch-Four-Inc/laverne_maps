@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2022 La Verne Election Results by Council District</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        .map-header {
+            flex: 0 0 auto;
+            z-index: 1000;
+            background: #fff;
+            padding: 10px 20px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+            text-align: center;
+        }
+
+        .map-header h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        .map-header p {
+            margin: 3px 0 0 0;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+
+        #map {
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+        }
+
+        .custom-popup {
+            font-size: 14px;
+            line-height: 1.4;
+            min-width: 240px;
+        }
+
+        .custom-popup h3 {
+            margin: 0 0 5px 0;
+            color: #2c3e50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        .popup-race {
+            font-size: 11px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .results-table th {
+            text-align: left;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #7f8c8d;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+            padding: 0 8px 4px 0;
+        }
+
+        .results-table td {
+            padding: 5px 8px 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #2c3e50;
+        }
+
+        .results-table th.num,
+        .results-table td.num {
+            text-align: right;
+            padding-left: 16px;
+            padding-right: 0;
+            white-space: nowrap;
+        }
+
+        .results-table tr.leader-row td {
+            font-weight: bold;
+        }
+
+        .candidate-swatch {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 2px;
+            margin-right: 6px;
+            vertical-align: middle;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+        }
+
+        .popup-toggle {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #2b6cb0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .popup-toggle:hover {
+            text-decoration: underline;
+        }
+
+        .popup-total {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #7f8c8d;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+
+        .metric-label {
+            font-weight: bold;
+            color: #555;
+            margin-right: 12px;
+        }
+
+        .control-panel {
+            background: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            font-size: 14px;
+            max-width: 280px;
+        }
+
+        .control-panel select {
+            padding: 5px;
+            margin-top: 5px;
+            width: 100%;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+        }
+
+        .info.legend {
+            background: white;
+            padding: 10px 12px;
+            font-size: 12px;
+            line-height: 16px;
+            color: #555;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            max-width: 210px;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: flex-start;
+            margin: 5px 0 0 0;
+        }
+
+        .legend-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            margin-right: 8px;
+            flex: 0 0 auto;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+        }
+
+        .legend-name {
+            color: #2c3e50;
+        }
+
+        .district-label {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid #999;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            line-height: 1.35;
+            text-align: center;
+            color: #2c3e50;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            white-space: nowrap;
+        }
+
+        .district-label:before {
+            display: none;
+        }
+
+        .label-district {
+            font-size: 10px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .label-leader {
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .label-numbers {
+            color: #555;
+        }
+
+        .error-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1200;
+            background: #fdecea;
+            border: 1px solid #f5c6cb;
+            color: #a02020;
+            padding: 16px 22px;
+            border-radius: 6px;
+            font-size: 14px;
+            max-width: 440px;
+            line-height: 1.5;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            .map-header {
+                padding: 8px 12px;
+            }
+
+            .map-header h1 {
+                font-size: 15px;
+            }
+
+            .map-header p {
+                font-size: 11px;
+            }
+
+            .control-panel {
+                max-width: 150px;
+                font-size: 12px;
+                padding: 8px 10px;
+            }
+
+            .control-panel select {
+                font-size: 12px;
+            }
+
+            .info.legend {
+                max-width: 145px;
+                font-size: 10px;
+                line-height: 13px;
+                padding: 8px;
+            }
+
+            .legend-swatch {
+                width: 11px;
+                height: 11px;
+                margin-right: 6px;
+            }
+
+            .custom-popup {
+                min-width: 0;
+                font-size: 12px;
+            }
+
+            .results-table {
+                font-size: 12px;
+            }
+
+            .results-table th {
+                font-size: 9px;
+            }
+
+            .results-table td {
+                padding: 4px 6px 4px 0;
+            }
+
+            .results-table td.num,
+            .results-table th.num {
+                padding-left: 12px;
+            }
+
+            .district-label {
+                font-size: 10px;
+                padding: 3px 6px;
+            }
+
+            .error-box {
+                max-width: 88%;
+                font-size: 13px;
+                padding: 14px 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="map-header">
+        <h1>2022 La Verne Election Results</h1>
+        <p>Leading candidate by city council district</p>
+    </div>
+
+    <div id="map"></div>
+    <div class="error-box" id="error-box"></div>
+
+    <script>
+        // ---- FILES THIS MAP READS -------------------------------------------
+        const GEOJSON_FILE = 'shape_files/laverne_districts.geojson';
+        const CSV_FILE = 'laverne_target_races_by_district.csv';
+        // ---------------------------------------------------------------------
+
+        // Initialize the map
+        const map = L.map('map').setView([34.1258, -117.7746], 13.5);
+
+        //  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        //     attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+
+         // Carto Voyager raster basemap api key
+        const CARTO_API_KEY = 'cb1_2gyk_1_ecf29e18fc1fa50db2963bee'
+        
+        // Carto map layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + (CARTO_API_KEY || ''), {
+            maxZoom: 20,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'    
+        }).addTo(map);
+
+        const candidatePalette = [
+            '#1f77b4',
+            '#ff7f0e',
+            '#2ca02c',
+            '#d62728',
+            '#9467bd',
+            '#8c564b',
+            '#e377c2',
+            '#17becf',
+            '#bcbd22',
+            '#7f7f7f',
+            '#393b79',
+            '#005a32'
+        ];
+
+        const colorOverrides = {
+            'GAVIN NEWSOM': '#d62728'
+        };
+
+        function overrideFor(candidate) {
+            return colorOverrides[String(candidate).trim().toUpperCase()];
+        }
+
+        const noDataColor = '#ccc';
+
+        function hslToHex(hue, sat, light) {
+            const a = sat * Math.min(light, 1 - light);
+            function channel(n) {
+                const k = (n + hue / 30) % 12;
+                const value = light - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+                return Math.round(255 * value).toString(16).padStart(2, '0');
+            }
+            return '#' + channel(0) + channel(8) + channel(4);
+        }
+
+        // Council districts arrive as "1ST", "2ND" in the CSV but "1", "2" in the
+        // GeoJSON. Reduce both sides to bare digits so the join always matches.
+        function normalizeDistrict(value) {
+            if (value === undefined || value === null) return '';
+            return String(value).replace(/\D/g, '');
+        }
+
+        function isSmallScreen() {
+            return window.matchMedia('(max-width: 600px)').matches;
+        }
+
+        function showError(message) {
+            const box = document.getElementById('error-box');
+            box.style.display = 'block';
+            box.innerHTML = message;
+        }
+
+        // Asynchronously fetch both geography file and CSV
+        Promise.all([
+            fetch(GEOJSON_FILE).then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status + ' loading ' + GEOJSON_FILE);
+                return response.json();
+            }),
+            fetch(CSV_FILE).then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status + ' loading ' + CSV_FILE);
+                return response.text();
+            })
+        ])
+            .then(([geoJsonData, rawCsvData]) => {
+
+                const headerLabelMap = {};
+
+                // Process the CSV file into a lookup map
+                const parsedCsv = Papa.parse(rawCsvData, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    transformHeader: function (originalHeader) {
+                        const trimmed = originalHeader.trim();
+                        const safeKey = trimmed
+                            .replace(/[^a-zA-Z0-9_]/g, '_')
+                            .replace(/__+/g, '_')
+                            .replace(/^_+|_+$/g, '');
+
+                        headerLabelMap[safeKey] = trimmed;
+                        return safeKey;
+                    }
+                });
+
+                const raceResults = {};
+                const raceTotals = {};
+
+                parsedCsv.data.forEach(row => {
+                    const race = row.race ? String(row.race).trim() : '';
+                    const candidate = row.candidate ? String(row.candidate).trim() : '';
+                    const district = normalizeDistrict(row.council_district);
+                    if (!race || !candidate || !district) return;
+
+                    if (!raceResults[race]) {
+                        raceResults[race] = {};
+                        raceTotals[race] = {};
+                    }
+                    if (!raceResults[race][district]) {
+                        raceResults[race][district] = [];
+                    }
+
+                    raceResults[race][district].push({
+                        candidate: candidate,
+                        votes: Number(row.votes) || 0,
+                        share: Number(row.vote_share_pct)
+                    });
+
+                    raceTotals[race][district] = Number(row.race_total) || 0;
+                });
+
+                // Sort each district's candidates
+                Object.keys(raceResults).forEach(race => {
+                    Object.keys(raceResults[race]).forEach(district => {
+                        raceResults[race][district].sort((a, b) => b.votes - a.votes);
+                    });
+                });
+
+                const allRaces = Object.keys(raceResults);
+
+                // Drop races that recorded no votes in any district
+                const raceKeys = allRaces.filter(race => {
+                    let cast = 0;
+                    Object.keys(raceTotals[race]).forEach(d => { cast += raceTotals[race][d]; });
+                    return cast > 0;
+                });
+
+                if (raceKeys.length === 0) {
+                    showError('<strong>No races found in ' + CSV_FILE + '</strong><br><br>' +
+                        'The file loaded but produced no usable rows. Check that it has the ' +
+                        'columns council_district, race, candidate, votes, race_total, vote_share_pct.');
+                    return;
+                }
+
+                const raceCandidates = {};
+                const candidateColors = {};
+                const globalVotes = {};
+                const takenColors = {};
+
+                raceKeys.forEach(race => {
+                    const cityWideVotes = {};
+
+                    Object.keys(raceResults[race]).forEach(district => {
+                        raceResults[race][district].forEach(row => {
+                            cityWideVotes[row.candidate] =
+                                (cityWideVotes[row.candidate] || 0) + row.votes;
+                            globalVotes[row.candidate] =
+                                (globalVotes[row.candidate] || 0) + row.votes;
+                        });
+                    });
+
+                    raceCandidates[race] = Object.keys(cityWideVotes)
+                        .sort((a, b) => cityWideVotes[b] - cityWideVotes[a] || a.localeCompare(b));
+                });
+
+                let paletteIndex = 0;
+
+                function hexToRgb(hex) {
+                    return [
+                        parseInt(hex.slice(1, 3), 16),
+                        parseInt(hex.slice(3, 5), 16),
+                        parseInt(hex.slice(5, 7), 16)
+                    ];
+                }
+
+                function tooClose(hex, minDistance) {
+                    const a = hexToRgb(hex);
+                    return Object.keys(takenColors).some(existing => {
+                        const b = hexToRgb(existing);
+                        const dr = a[0] - b[0];
+                        const dg = a[1] - b[1];
+                        const db = a[2] - b[2];
+                        return Math.sqrt(2 * dr * dr + 4 * dg * dg + 3 * db * db) < minDistance;
+                    });
+                }
+
+                function nextColor() {
+                    let color;
+
+                    while (paletteIndex < candidatePalette.length &&
+                        takenColors[candidatePalette[paletteIndex]]) {
+                        paletteIndex++;
+                    }
+
+                    if (paletteIndex < candidatePalette.length) {
+                        color = candidatePalette[paletteIndex];
+                        paletteIndex++;
+                    } else {
+                        const extra = paletteIndex - candidatePalette.length;
+                        paletteIndex++;
+
+                        let hue = (extra * 137.508 + 15) % 360;
+                        const sat = (extra % 2 === 0) ? 0.72 : 0.45;
+                        const light = 0.36 + (extra % 3) * 0.08;
+
+                        color = hslToHex(hue, sat, light);
+
+                        let threshold = 110;
+                        let guard = 0;
+                        while (tooClose(color, threshold) && guard < 120) {
+                            hue = (hue + 13) % 360;
+                            color = hslToHex(hue, sat, light);
+                            guard++;
+                            if (guard % 30 === 0) threshold -= 25;
+                        }
+                    }
+
+                    takenColors[color] = true;
+                    return color;
+                }
+
+                Object.keys(colorOverrides).forEach(name => {
+                    takenColors[colorOverrides[name]] = true;
+                });
+
+                Object.keys(globalVotes)
+                    .sort((a, b) => globalVotes[b] - globalVotes[a] || a.localeCompare(b))
+                    .forEach(candidate => {
+                        candidateColors[candidate] = overrideFor(candidate) || nextColor();
+                    });
+
+                function colorFor(candidate) {
+                    if (!candidate) return noDataColor;
+                    return candidateColors[candidate] || noDataColor;
+                }
+
+                // Attach the leader of every race to the matching district
+                geoJsonData.features.forEach(feature => {
+                    const district = normalizeDistrict(feature.properties.district);
+                    const leaders = {};
+                    const results = {};
+
+                    raceKeys.forEach(race => {
+                        const rows = (raceResults[race] || {})[district] || [];
+                        results[race] = rows;
+
+                        if (rows.length === 0 || raceTotals[race][district] === 0) {
+                            leaders[race] = null;
+                            return;
+                        }
+                        const leader = rows[0];
+                        leaders[race] = {
+                            candidate: leader.candidate,
+                            votes: leader.votes,
+                            share: leader.share,
+                            raceTotal: raceTotals[race][district]
+                        };
+                    });
+
+                    feature.properties.districtKey = district;
+                    feature.properties.leaders = leaders;
+                    feature.properties.results = results;
+                });
+
+                let geoJsonLayer;
+                let legendControl;
+                let currentRace = raceKeys[0];
+                let hasFitBounds = false;
+                let popupCounter = 0;
+
+                function updateMap() {
+
+                    if (geoJsonLayer) {
+                        map.removeLayer(geoJsonLayer);
+                    }
+
+                    geoJsonLayer = L.geoJSON(geoJsonData, {
+                        style: function (feature) {
+                            const leader = feature.properties.leaders[currentRace];
+                            return {
+                                fillColor: leader ? colorFor(leader.candidate) : noDataColor,
+                                weight: 2,
+                                opacity: 1,
+                                color: 'white',
+                                fillOpacity: 0.75
+                            };
+                        },
+                        onEachFeature: function (feature, layer) {
+                            const props = feature.properties;
+                            const district = props.districtKey;
+                            const leader = props.leaders[currentRace];
+                            const rows = props.results[currentRace] || [];
+
+                            let labelHtml = '<div class="label-district">District ' + district + '</div>';
+                            if (leader) {
+                                labelHtml += '<div class="label-leader">' + leader.candidate + '</div>';
+                                labelHtml += '<div class="label-numbers">' + leader.share.toFixed(1) + '%</div>';
+                            } else {
+                                labelHtml += '<div class="label-numbers">No results</div>';
+                            }
+
+                            layer.bindTooltip(labelHtml, {
+                                permanent: !isSmallScreen(),
+                                direction: 'center',
+                                className: 'district-label',
+                                opacity: 1
+                            });
+
+                            layer.on({
+                                click: function () {
+                                    const toggleId = 'candidate-toggle-' + (++popupCounter);
+                                    let expanded = false;
+
+                                    function buildPopupHtml() {
+                                        let html =
+                                            '<div class="custom-popup">' +
+                                            '<h3>District ' + district + '</h3>' +
+                                            '<div class="popup-race">' + currentRace + '</div>';
+
+                                        if (rows.length > 0) {
+                                            const visible = expanded ? rows : rows.slice(0, 3);
+                                            const hidden = rows.length - visible.length;
+
+                                            html +=
+                                                '<table class="results-table"><thead><tr>' +
+                                                '<th>Candidate</th>' +
+                                                '<th class="num">Votes</th>' +
+                                                '<th class="num">Share</th>' +
+                                                '</tr></thead><tbody>';
+
+                                            visible.forEach((row, index) => {
+                                                const swatch = colorFor(row.candidate);
+                                                const shareText = isNaN(row.share)
+                                                    ? '&mdash;'
+                                                    : row.share.toFixed(1) + '%';
+
+                                                html +=
+                                                    '<tr' + (index === 0 ? ' class="leader-row"' : '') + '>' +
+                                                    '<td><span class="candidate-swatch" style="background:' +
+                                                    swatch + '"></span>' + row.candidate + '</td>' +
+                                                    '<td class="num">' + row.votes.toLocaleString() + '</td>' +
+                                                    '<td class="num">' + shareText + '</td>' +
+                                                    '</tr>';
+                                            });
+
+                                            html += '</tbody></table>';
+
+                                            if (hidden > 0) {
+                                                html += '<span class="popup-toggle" id="' + toggleId + '">+ ' +
+                                                    hidden + ' other candidate' + (hidden === 1 ? '' : 's') +
+                                                    '</span>';
+                                            } else if (rows.length > 3) {
+                                                html += '<span class="popup-toggle" id="' + toggleId +
+                                                    '">Show fewer</span>';
+                                            }
+
+                                            if (leader) {
+                                                html += '<div class="popup-total">Total ballots: ' +
+                                                    leader.raceTotal.toLocaleString() + '</div>';
+                                            }
+                                        } else {
+                                            html +=
+                                                '<div class="metric-row"><span>No votes recorded</span></div>';
+                                        }
+
+                                        return html + '</div>';
+                                    }
+
+                                    function attachToggle() {
+                                        const link = document.getElementById(toggleId);
+                                        if (!link) return;
+                                        L.DomEvent.on(link, 'click', function (e) {
+                                            L.DomEvent.stop(e);
+                                            expanded = !expanded;
+                                            layer.setPopupContent(buildPopupHtml());
+                                            attachToggle();
+                                        });
+                                    }
+
+                                    layer.bindPopup(buildPopupHtml(), {
+                                        maxWidth: 320,
+                                        maxHeight: isSmallScreen() ? 260 : 420
+                                    }).openPopup();
+
+                                    attachToggle();
+                                },
+                                mouseover: function (e) { e.target.setStyle({ fillOpacity: 0.92, weight: 3 }); },
+                                mouseout: function (e) { e.target.setStyle({ fillOpacity: 0.75, weight: 2 }); }
+                            });
+                        }
+                    }).addTo(map);
+
+                    if (!hasFitBounds) {
+                        map.fitBounds(geoJsonLayer.getBounds(), { padding: [15, 15] });
+                        hasFitBounds = true;
+                    }
+
+                    if (legendControl) {
+                        map.removeControl(legendControl);
+                    }
+
+                    legendControl = L.control({ position: 'bottomright' });
+                    legendControl.onAdd = function () {
+                        const div = L.DomUtil.create('div', 'info legend');
+                        const top = (raceCandidates[currentRace] || []).slice(0, 3);
+
+                        let html = '<strong>Leading candidate</strong>';
+
+                        top.forEach(candidate => {
+                            html += '<div class="legend-row">' +
+                                '<span class="legend-swatch" style="background:' +
+                                colorFor(candidate) + '"></span>' +
+                                '<span class="legend-name">' + candidate + '</span>' +
+                                '</div>';
+                        });
+
+                        div.innerHTML = html;
+
+                        L.DomEvent.disableClickPropagation(div);
+
+                        return div;
+                    };
+                    legendControl.addTo(map);
+                }
+
+                const selectorControl = L.control({ position: 'topright' });
+                selectorControl.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'control-panel');
+                    div.innerHTML = '<label for="race-select"><strong>Select Race:</strong></label><br>';
+
+                    const select = document.createElement('select');
+                    select.id = 'race-select';
+
+                    raceKeys.forEach(race => {
+                        const option = document.createElement('option');
+                        option.value = race;
+                        option.textContent = race;
+                        if (race === currentRace) option.selected = true;
+                        select.appendChild(option);
+                    });
+                    div.appendChild(select);
+
+                    L.DomEvent.disableClickPropagation(div);
+                    L.DomEvent.disableScrollPropagation(div);
+
+                    L.DomEvent.on(select, 'change', function (e) {
+                        currentRace = e.target.value;
+                        updateMap();
+                    });
+
+                    return div;
+                };
+                selectorControl.addTo(map);
+
+                // Initial map load
+                updateMap();
+
+                let wasSmall = isSmallScreen();
+                window.addEventListener('resize', function () {
+                    const nowSmall = isSmallScreen();
+                    if (nowSmall !== wasSmall) {
+                        wasSmall = nowSmall;
+                        updateMap();
+                    }
+                });
+
+            })
+            .catch(error => {
+                showError('<strong>Could not load the map data</strong><br><br>' +
+                    error.message + '<br><br>Both ' + GEOJSON_FILE + ' and ' + CSV_FILE +
+                    ' must sit in the same folder as this HTML file, and it must be served over ' +
+                    'http (python -m http.server), not opened directly as a file.');
+                console.error(error);
+            });
+    </script>
+</body>
+
+</html>
